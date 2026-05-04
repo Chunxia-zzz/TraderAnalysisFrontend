@@ -1,15 +1,53 @@
 <template>
   <div>
+    <!-- 标的选择 -->
+    <a-card style="margin-bottom: 16px" size="small">
+      <a-space>
+        <span style="color: #666">标的</span>
+        <a-select
+          v-model:value="code"
+          placeholder="选择标的"
+          style="width: 200px"
+          show-search
+          :loading="watchlistLoading"
+          :options="watchlistOptions"
+          @change="loadData"
+        />
+      </a-space>
+    </a-card>
+
     <a-row :gutter="[16, 16]">
       <!-- 最新评分 -->
       <a-col :span="24">
-        <a-card title="最新评分 — US.SNDK" :loading="scoreLoading">
-          <a-result
-            v-if="score"
-            :status="scoreStatus"
-            :title="`综合评分: ${score.total_score ?? '-'}`"
-            :sub-title="scoreSubTitle"
-          />
+        <a-card :title="`最新评分 — ${code || ''}`" :loading="scoreLoading">
+          <template v-if="score">
+            <a-row :gutter="16" align="middle" style="margin-bottom: 16px">
+              <a-col>
+                <a-statistic
+                  title="综合评分"
+                  :value="score.total_score"
+                  :value-style="{ color: scoreColor }"
+                />
+              </a-col>
+              <a-col>
+                <a-tag :color="signalTagColor">{{ score.signal }}</a-tag>
+              </a-col>
+              <a-col>
+                <span style="color: #999; font-size: 12px">{{ score.date }}</span>
+              </a-col>
+            </a-row>
+            <!-- 因子明细 -->
+            <a-row :gutter="[12, 8]">
+              <a-col :xs="12" :md="8" v-for="(item, key) in score.breakdown" :key="key">
+                <div class="factor-item">
+                  <span class="factor-label">{{ factorLabel(key) }}</span>
+                  <a-tag v-if="item.triggered" color="green" size="small">触发</a-tag>
+                  <a-tag v-else size="small">未触发</a-tag>
+                  <span class="factor-score">+{{ item.score }}</span>
+                </div>
+              </a-col>
+            </a-row>
+          </template>
           <a-empty v-else-if="!scoreLoading" description="暂无评分数据" />
         </a-card>
       </a-col>
@@ -63,30 +101,48 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getIndicatorsLatest, getScoresLatest } from '../api/trader'
+import { message } from 'ant-design-vue'
+import { getIndicatorsLatest, getScoresLatest, getWatchlist } from '../api/trader'
 
+const code = ref(undefined)
+const watchlistLoading = ref(false)
+const watchlistOptions = ref([])
 const latest = ref(null)
 const score = ref(null)
 const indicatorLoading = ref(true)
 const scoreLoading = ref(true)
 
-const scoreStatus = computed(() => {
-  if (!score.value) return 'info'
+const scoreColor = computed(() => {
+  if (!score.value) return '#999'
   const s = score.value.total_score
-  if (s >= 70) return 'success'
-  if (s <= 30) return 'error'
-  return 'warning'
+  if (s >= 70) return '#52c41a'
+  if (s >= 40) return '#faad14'
+  return '#f5222d'
 })
 
-const scoreSubTitle = computed(() => {
+const signalTagColor = computed(() => {
   if (!score.value) return ''
-  const parts = []
-  if (score.value.date) parts.push(`日期: ${score.value.date}`)
-  if (score.value.trend_score != null) parts.push(`趋势: ${score.value.trend_score}`)
-  if (score.value.momentum_score != null) parts.push(`动量: ${score.value.momentum_score}`)
-  if (score.value.volatility_score != null) parts.push(`波动: ${score.value.volatility_score}`)
-  return parts.join('  |  ')
+  const sig = score.value.signal
+  if (sig === 'BUY') return 'green'
+  if (sig === 'SELL') return 'red'
+  return 'default'
 })
+
+const FACTOR_LABELS = {
+  weekly_rsi: '周RSI超卖',
+  daily_macd_divergence: '日MACD底背离',
+  vix: 'VIX恐慌',
+  boll_lower: '布林下轨',
+  daily_rsi: '日RSI超卖',
+  cnn_fg: 'CNN恐贪指数',
+  panic_volume: '恐慌放量',
+  weekly_macd_shrink: '周MACD缩柱',
+  ma250_deviation: 'MA250偏离',
+}
+
+function factorLabel(key) {
+  return FACTOR_LABELS[key] || key
+}
 
 function fmt(val) {
   return val != null ? Number(val).toFixed(2) : '-'
@@ -99,14 +155,58 @@ function fmtVol(val) {
   return val.toString()
 }
 
-onMounted(async () => {
+async function loadData() {
+  if (!code.value) return
+  latest.value = null
+  score.value = null
+  indicatorLoading.value = true
+  scoreLoading.value = true
   const [indRes, scoreRes] = await Promise.allSettled([
-    getIndicatorsLatest('US.SNDK'),
-    getScoresLatest('US.SNDK'),
+    getIndicatorsLatest(code.value),
+    getScoresLatest(code.value),
   ])
   if (indRes.status === 'fulfilled') latest.value = indRes.value.data
   if (scoreRes.status === 'fulfilled') score.value = scoreRes.value.data
   indicatorLoading.value = false
   scoreLoading.value = false
+}
+
+onMounted(async () => {
+  watchlistLoading.value = true
+  try {
+    const res = await getWatchlist()
+    const data = res.data
+    const list = (data.watchlist || []).filter((item) => item.has_data)
+    watchlistOptions.value = list.map((item) => ({
+      label: `${item.ticker} - ${item.name}`,
+      value: item.futu_code,
+    }))
+    if (watchlistOptions.value.length > 0) {
+      code.value = watchlistOptions.value[0].value
+      loadData()
+    }
+  } catch {
+    message.error('获取标的列表失败')
+  } finally {
+    watchlistLoading.value = false
+  }
 })
 </script>
+
+<style scoped>
+.factor-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.factor-label {
+  color: #333;
+}
+.factor-score {
+  margin-left: auto;
+  font-weight: 600;
+  color: #52c41a;
+}
+</style>

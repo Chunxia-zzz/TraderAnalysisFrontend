@@ -3,11 +3,13 @@
     <!-- 查询表单 -->
     <a-card style="margin-bottom: 16px">
       <a-space wrap>
-        <a-input
+        <a-select
           v-model:value="code"
-          placeholder="标的代码，如 US.SNDK"
+          placeholder="选择标的"
           style="width: 200px"
-          allow-clear
+          show-search
+          :loading="watchlistLoading"
+          :options="watchlistOptions"
         />
         <a-select v-model:value="ktype" style="width: 120px">
           <a-select-option value="1d">日K</a-select-option>
@@ -89,10 +91,12 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { getIndicators } from '../api/trader'
+import { getIndicators, getWatchlist } from '../api/trader'
 import IndicatorChart from '../components/IndicatorChart.vue'
 
-const code = ref('US.SNDK')
+const code = ref(undefined)
+const watchlistLoading = ref(false)
+const watchlistOptions = ref([])
 const ktype = ref('1d')
 const days = ref(250)
 const loading = ref(false)
@@ -132,7 +136,28 @@ async function fetchData() {
   }
 }
 
-onMounted(() => fetchData())
+async function loadWatchlist() {
+  watchlistLoading.value = true
+  try {
+    const res = await getWatchlist()
+    const data = res.data
+    const list = (data.watchlist || []).filter((item) => item.has_data)
+    watchlistOptions.value = list.map((item) => ({
+      label: `${item.ticker} - ${item.name}`,
+      value: item.futu_code,
+    }))
+    if (watchlistOptions.value.length > 0 && !code.value) {
+      code.value = watchlistOptions.value[0].value
+      fetchData()
+    }
+  } catch {
+    message.error('获取标的列表失败')
+  } finally {
+    watchlistLoading.value = false
+  }
+}
+
+onMounted(() => loadWatchlist())
 </script>
 
 <style scoped>

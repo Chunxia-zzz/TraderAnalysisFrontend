@@ -1,68 +1,23 @@
 <template>
   <a-layout style="min-height: 100vh">
-    <a-layout-sider v-model:collapsed="collapsed" collapsible>
-      <div class="logo">TraderAnalysis</div>
-      <a-menu
-        v-model:selectedKeys="selectedKeys"
-        theme="dark"
-        mode="inline"
-        @click="onMenuClick"
-      >
-        <a-menu-item key="dashboard">
-          <fund-outlined />
-          <span>概览</span>
-        </a-menu-item>
-        <a-menu-item key="chart">
-          <line-chart-outlined />
-          <span>K线图</span>
-        </a-menu-item>
-      </a-menu>
-    </a-layout-sider>
+    <a-layout-header class="top-header">
+      <div class="header-inner">
+        <router-link to="/" class="logo">JerryYang的投资世界</router-link>
+        <nav class="nav-links" style="margin-left: auto">
+          <router-link to="/market-temperature" class="nav-item">市场温度</router-link>
+          <router-link to="/chart" class="nav-item">K线图</router-link>
+          <router-link to="/dashboard" class="nav-item">个股技术分析</router-link>
+        </nav>
+      </div>
+    </a-layout-header>
 
-    <a-layout>
-      <a-layout-header style="background: #fff; padding: 0 24px; display: flex; align-items: center">
-        <a-badge :status="apiStatus" :text="apiStatusText" />
-      </a-layout-header>
-
-      <a-layout-content style="margin: 24px">
-        <router-view />
-      </a-layout-content>
-
-      <a-layout-footer style="text-align: center; color: #999">
-        TraderAnalysis &copy; {{ new Date().getFullYear() }}
-      </a-layout-footer>
-    </a-layout>
+    <a-layout-content class="main-content">
+      <router-view />
+    </a-layout-content>
   </a-layout>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { FundOutlined, LineChartOutlined } from '@ant-design/icons-vue'
-import { getHealth } from './api/trader'
-
-const router = useRouter()
-const route = useRoute()
-const collapsed = ref(false)
-const selectedKeys = ref([route.name || 'dashboard'])
-const apiStatus = ref('default')
-const apiStatusText = ref('检查后端连接...')
-
-function onMenuClick({ key }) {
-  router.push({ name: key })
-  selectedKeys.value = [key]
-}
-
-onMounted(async () => {
-  try {
-    await getHealth()
-    apiStatus.value = 'success'
-    apiStatusText.value = '后端已连接'
-  } catch {
-    apiStatus.value = 'error'
-    apiStatusText.value = '后端离线'
-  }
-})
 </script>
 
 <style>
@@ -70,16 +25,72 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-.logo {
-  height: 32px;
-  margin: 16px;
-  color: #fff;
-  font-weight: bold;
-  font-size: 16px;
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: #1a1a1a;
+  color: #f5c518;
+}
+
+.top-header {
+  background: #111 !important;
+  border-bottom: 1px solid #333;
+  padding: 0 32px !important;
+  height: 56px;
+  line-height: 56px;
+}
+
+.header-inner {
   display: flex;
   align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  white-space: nowrap;
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 100%;
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f5c518;
+  text-decoration: none;
+  margin-right: 48px;
+}
+
+.logo:hover {
+  color: #f5c518;
+}
+
+.nav-links {
+  display: flex;
+  gap: 32px;
+}
+
+.nav-item {
+  color: #aaa;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.nav-item:hover,
+.nav-item.router-link-active {
+  color: #f5c518;
+}
+
+.main-content {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 32px;
+  background: #1a1a1a;
+}
+
+.ant-layout {
+  background: #1a1a1a !important;
+}
+
+.ant-layout-content {
+  background: #1a1a1a !important;
 }
 </style>

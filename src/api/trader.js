@@ -13,20 +13,26 @@ client.interceptors.response.use(
   }
 )
 
-export const getHealth       = ()             => client.get('/health')
-export const getLatest       = ()             => client.get('/v1/indicators/latest')
-export const getHistory      = (limit = 100)  => client.get('/v1/indicators/history', { params: { limit } })
-export const getLatestSignal = ()             => client.get('/v1/signals/latest')
+// ── 健康检查（用 watchlist 接口代替，后端无 /health 端点） ──
+export const getHealth = () => client.get('/api/watchlist')
 
-// ── 新接口 (/api) ──────────────────────────────────────────
-export const getIndicators       = (code, ktype = '1d', days = 250) =>
+// ── 标的池 ──
+export const getWatchlist = () => client.get('/api/watchlist')
+
+// ── 技术指标 ──
+export const getIndicators = (code, ktype = '1d', days = 60) =>
   client.get('/api/indicators', { params: { code, ktype, days } })
 
 export const getIndicatorsLatest = (code, ktype = '1d') =>
   client.get('/api/indicators/latest', { params: { code, ktype } })
 
-export const getScoresLatest     = (code) =>
+// ── 评分 ──
+export const getScoresLatest = (code) =>
   client.get('/api/scores/latest', { params: { code } })
 
-export const getWatchlist        = () =>
-  client.get('/api/watchlist')
+// ── 市场温度 ──
+export const getMarketTemperature = () =>
+  client.get('/api/market-temperature')
+
+export const getMarketTemperatureHistory = (days = 30) =>
+  client.get('/api/market-temperature/history', { params: { days } })
