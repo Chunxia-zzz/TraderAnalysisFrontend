@@ -6,6 +6,8 @@
         CNN Fear &amp; Greed Index
       </a>
       <span style="color: #999; margin-left: 8px; font-size: 12px">— CNN 恐惧与贪婪指数，市场情绪参考</span>
+      <br />
+      <span style="color: #f5c518; font-size: 13px; margin-top: 4px; display: inline-block">交易时请观察VIX期货价格，30以上为极度恐慌，35以上往往是抄底的绝佳机会</span>
     </a-card>
 
     <!-- 顶部概览 -->
@@ -51,7 +53,7 @@
 
     <!-- 维度拆解 -->
     <a-card title="维度拆解" style="margin-bottom: 16px" :loading="loading" v-if="data">
-      <div v-for="dim in dimensions" :key="dim.key" class="dimension-row">
+      <div v-for="dim in activeDimensions" :key="dim.key" class="dimension-row">
         <span class="dim-name">{{ dim.name }}</span>
         <a-tag size="small" style="min-width: 36px; text-align: center">{{ dim.weight }}</a-tag>
         <a-progress
@@ -66,41 +68,23 @@
 
     <!-- 标的指标卡片 -->
     <a-row :gutter="[16, 16]" style="margin-bottom: 16px" v-if="data">
-      <a-col :xs="12" :md="6">
+      <a-col :xs="24" :md="12">
         <a-card size="small" title="SPY">
-          <a-descriptions :column="1" size="small">
+          <a-descriptions :column="2" size="small">
             <a-descriptions-item label="价格">{{ fmt(data.spy_price) }}</a-descriptions-item>
             <a-descriptions-item label="日RSI">{{ fmt(data.spy_daily_rsi) }}</a-descriptions-item>
             <a-descriptions-item label="周RSI">{{ fmt(data.spy_weekly_rsi) }}</a-descriptions-item>
             <a-descriptions-item label="MA200偏离">{{ pct(data.spy_ma200_dev) }}</a-descriptions-item>
-            <a-descriptions-item label="量比">{{ fmt(data.spy_vol_ratio) }}x</a-descriptions-item>
           </a-descriptions>
         </a-card>
       </a-col>
-      <a-col :xs="12" :md="6">
+      <a-col :xs="24" :md="12">
         <a-card size="small" title="QQQ">
-          <a-descriptions :column="1" size="small">
+          <a-descriptions :column="2" size="small">
             <a-descriptions-item label="价格">{{ fmt(data.qqq_price) }}</a-descriptions-item>
             <a-descriptions-item label="日RSI">{{ fmt(data.qqq_daily_rsi) }}</a-descriptions-item>
             <a-descriptions-item label="周RSI">{{ fmt(data.qqq_weekly_rsi) }}</a-descriptions-item>
             <a-descriptions-item label="MA200偏离">{{ pct(data.qqq_ma200_dev) }}</a-descriptions-item>
-            <a-descriptions-item label="量比">{{ fmt(data.qqq_vol_ratio) }}x</a-descriptions-item>
-          </a-descriptions>
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :md="6">
-        <a-card size="small" title="GLD">
-          <a-descriptions :column="1" size="small">
-            <a-descriptions-item label="价格">{{ fmt(data.gld_price) }}</a-descriptions-item>
-            <a-descriptions-item label="RSI">{{ fmt(data.detail?.GLD_RSI) }}</a-descriptions-item>
-          </a-descriptions>
-        </a-card>
-      </a-col>
-      <a-col :xs="12" :md="6">
-        <a-card size="small" title="VIXY">
-          <a-descriptions :column="1" size="small">
-            <a-descriptions-item label="价格">{{ fmt(data.vix_value) }}</a-descriptions-item>
-            <a-descriptions-item label="分位">{{ pct(data.detail?.VIXY_pct_rank) }}</a-descriptions-item>
           </a-descriptions>
         </a-card>
       </a-col>
@@ -131,17 +115,14 @@ const TEMPERATURE_LEVELS = [
 
 const LEVERAGE_LABELS = {
   none: null,
-  margin: { text: '建议融资补仓（现货ETF）', detail: '融资额度不超过净值30%，评分回升至45后偿还' },
-  'margin + OTM_call': { text: '建议融资 + OTM Call期权超配', detail: '融资<=净值30% + 权利金<=净值10%，期权选30-60天轻度OTM' },
+  margin: { text: '建议融资补仓（现货ETF）', detail: '融资额度不超过净值30%' },
+  'margin + OTM_call': { text: '建议融资 + OTM Call期权超配', detail: '融资≤净值30% + 权利金≤净值10%' },
 }
 
 const dimensions = [
-  { key: 'daily_tech_score',  name: '日线技术面', weight: '30%' },
-  { key: 'weekly_tech_score', name: '周线技术面', weight: '15%' },
-  { key: 'vol_score',         name: '波动率',     weight: '25%' },
+  { key: 'daily_tech_score',  name: '日线技术面', weight: '50%' },
+  { key: 'weekly_tech_score', name: '周线技术面', weight: '35%' },
   { key: 'price_score',       name: '价格位置',   weight: '15%' },
-  { key: 'volume_score',      name: '量能确认',   weight: '8%' },
-  { key: 'safe_haven_score',  name: '避险信号',   weight: '7%' },
 ]
 
 function getDimensionColor(score) {
@@ -176,6 +157,11 @@ const level = computed(() => {
 const leverageInfo = computed(() => {
   if (!data.value) return null
   return LEVERAGE_LABELS[data.value.leverage_tool] || null
+})
+
+const activeDimensions = computed(() => {
+  if (!data.value) return []
+  return dimensions.filter(dim => data.value[dim.key] != null)
 })
 
 function renderChart() {
