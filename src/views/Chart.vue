@@ -127,7 +127,12 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getIndicators(code.value, ktype.value, days.value)
-    chartData.value = res.data.data
+    const d = res.data
+    // 兼容新格式: data为空数组+message 表示无数据
+    chartData.value = d.data || []
+    if (d.message && chartData.value.length === 0) {
+      message.info(d.message)
+    }
   } catch {
     message.error('获取数据失败，请检查后端连接')
     chartData.value = []

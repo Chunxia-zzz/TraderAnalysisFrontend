@@ -36,14 +36,14 @@
   font-size: clamp(28px, 5vw, 42px);
   font-weight: 700;
   line-height: 1.3;
-  color: #f5c518;
+  color: #1a1a1a;
   margin-bottom: 32px;
 }
 
 .subtitle {
   font-size: 16px;
   line-height: 2;
-  color: #ccc;
+  color: #666;
 }
 
 .subtitle p {
@@ -57,8 +57,8 @@
 .cta-btn {
   display: inline-block;
   padding: 12px 32px;
-  background: #f5c518;
-  color: #1a1a1a;
+  background: #1890ff;
+  color: #ffffff;
   border-radius: 6px;
   text-decoration: none;
   font-size: 15px;

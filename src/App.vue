@@ -5,6 +5,7 @@
         <router-link to="/" class="logo">JerryYang的投资世界</router-link>
         <nav class="nav-links" style="margin-left: auto">
           <router-link to="/market-temperature" class="nav-item">市场温度</router-link>
+          <router-link to="/scores-overview" class="nav-item">机会速览</router-link>
           <router-link to="/chart" class="nav-item">K线图</router-link>
           <router-link to="/dashboard" class="nav-item">个股技术分析</router-link>
         </nav>
@@ -28,13 +29,13 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  background: #1a1a1a;
-  color: #f5c518;
+  background: #ffffff;
+  color: #333333;
 }
 
 .top-header {
-  background: #111 !important;
-  border-bottom: 1px solid #333;
+  background: #fff !important;
+  border-bottom: 1px solid #e8e8e8;
   padding: 0 32px !important;
   height: 56px;
   line-height: 56px;
@@ -51,13 +52,13 @@ body {
 .logo {
   font-size: 18px;
   font-weight: 700;
-  color: #f5c518;
+  color: #1a1a1a;
   text-decoration: none;
   margin-right: 48px;
 }
 
 .logo:hover {
-  color: #f5c518;
+  color: #1a1a1a;
 }
 
 .nav-links {
@@ -66,7 +67,7 @@ body {
 }
 
 .nav-item {
-  color: #aaa;
+  color: #666;
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
@@ -75,7 +76,7 @@ body {
 
 .nav-item:hover,
 .nav-item.router-link-active {
-  color: #f5c518;
+  color: #1890ff;
 }
 
 .main-content {
@@ -83,14 +84,14 @@ body {
   width: 100%;
   margin: 0 auto;
   padding: 24px 32px;
-  background: #1a1a1a;
+  background: #ffffff;
 }
 
 .ant-layout {
-  background: #1a1a1a !important;
+  background: #f5f5f5 !important;
 }
 
 .ant-layout-content {
-  background: #1a1a1a !important;
+  background: #ffffff !important;
 }
 </style>

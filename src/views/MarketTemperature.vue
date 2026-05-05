@@ -7,7 +7,7 @@
       </a>
       <span style="color: #999; margin-left: 8px; font-size: 12px">— CNN 恐惧与贪婪指数，市场情绪参考</span>
       <br />
-      <span style="color: #f5c518; font-size: 13px; margin-top: 4px; display: inline-block">交易时请观察VIX期货价格，30以上为极度恐慌，35以上往往是抄底的绝佳机会</span>
+      <span style="color: #fa8c16; font-size: 13px; margin-top: 4px; display: inline-block">交易时请观察VIX期货价格，30以上为极度恐慌，35以上往往是抄底的绝佳机会</span>
     </a-card>
 
     <!-- 顶部概览 -->

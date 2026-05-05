@@ -1,6 +1,6 @@
 # TraderAnalysis Frontend — 技术方案
 
-> 更新日期：2026-04-22
+> 更新日期：2026-05-05
 
 ---
 
@@ -8,15 +8,17 @@
 
 TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获取行情数据、计算技术指标和评分；前端负责将这些数据以图表和数值面板的形式呈现给用户。
 
-当前主要分析标的为 **US.SNDK**，后端支持按标的代码查询。
+当前监控 **41 只标的**（覆盖大盘/黄金/比特币/存储/光通信/MAG7/加密/半导体/太空/云/中概/防守消费等 10 个分类），后端支持按标的代码查询。
 
 ### 1.1 核心用户场景
 
 | 场景 | 描述 |
 |------|------|
-| 查看 K 线图 | 用户输入标的代码，选择周期(日K/周K)和天数，查看蜡烛图及叠加的技术指标 |
+| 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议 |
+| 交易机会速览 | 一眼看清所有标的评分分布，哪些触发买入信号 |
+| 查看 K 线图 | 选择标的和周期，查看蜡烛图及叠加的技术指标 |
+| 个股技术分析 | 查看某标的最新技术指标数值和评分（6 维度连续映射） |
 | 切换指标显隐 | 通过页面按钮控制均线、布林带、成交量、MACD、RSI 的显示/隐藏 |
-| 查看概览 | 一眼看到最新的价格、均线、MACD、RSI 数值和综合评分 |
 
 ---
 
@@ -28,10 +30,11 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 |----|------|------|----------|
 | **Vue 3** | ^3.5 | 前端框架 | Composition API 灵活，生态成熟，中文资料丰富 |
 | **Vite** | ^5.4 | 构建工具 | 毫秒级热更新，内置代理，Vue 官方推荐 |
-| **Ant Design Vue** | ^4.2 | UI 组件库 | 提供布局(Layout)、卡片(Card)、表单(Input/Select)、标签(Tag)、描述列表(Descriptions) 等 60+ 组件，开箱即用 |
-| **ECharts** | ^6.0 | 图表渲染 | 原生支持 K 线蜡烛图 + 多窗格(grid)联动，适合金融场景 |
+| **Ant Design Vue** | ^4.2 | UI 组件库 | 提供布局、卡片、表单、标签、描述列表、日期选择器等 60+ 组件 |
+| **ECharts** | ^6.0 | 图表渲染 | 原生支持 K 线蜡烛图 + 多窗格联动，适合金融场景 |
 | **Axios** | ^1.7 | HTTP 客户端 | 拦截器、超时控制、错误统一处理 |
 | **Vue Router** | ^4.4 | 路由 | SPA 页面导航，支持懒加载 |
+| **Day.js** | — | 日期处理 | Ant Design Vue DatePicker 依赖 |
 
 ### 2.2 为什么用 ECharts 而不是 LightweightCharts
 
@@ -49,8 +52,6 @@ TraderAnalysisFrontend/
 ├── index.html                    # HTML 入口，Vite 从这里启动
 ├── package.json                  # 依赖声明和 npm 脚本
 ├── vite.config.js                # Vite 配置（开发代理、端口）
-├── .env.development              # 开发环境变量（后端地址）
-├── .env.production               # 生产环境变量
 │
 ├── public/                       # 静态资源（直接复制到 dist/）
 │   └── favicon.ico
@@ -60,75 +61,137 @@ TraderAnalysisFrontend/
 │
 └── src/                          # 源代码
     ├── main.js                   # 应用入口
-    ├── App.vue                   # 根组件
+    ├── App.vue                   # 根组件（顶部导航布局）
     ├── router/index.js           # 路由配置
     ├── api/trader.js             # API 调用层
     ├── components/               # 可复用组件
     │   ├── IndicatorChart.vue    # ECharts 图表组件
     │   └── KLineChart.vue        # 旧图表组件（未使用）
     └── views/                    # 页面
-        ├── Dashboard.vue         # 概览页
-        └── Chart.vue             # K 线图查询页
+        ├── Home.vue              # 首页（品牌 slogan）
+        ├── MarketTemperature.vue # 市场温度仪表盘
+        ├── ScoresOverview.vue    # 交易机会速览
+        ├── Chart.vue             # K 线图查询页
+        └── Dashboard.vue         # 个股技术分析
 ```
 
 ---
 
-## 4. 各文件详细说明
+## 4. 页面与路由
 
-### 4.1 配置文件
+### 4.1 路由表
 
-#### `index.html`
-Vite 的 HTML 入口。包含一个 `<div id="app">` 挂载点和一个 `<script>` 标签引入 `src/main.js`。不需要手动修改。
-
-#### `vite.config.js`
-Vite 构建配置。关键内容：
-- 开发服务器端口：**5173**
-- API 代理：将 `/api`、`/v1`、`/health` 开头的请求转发到 `http://localhost:8000`，这样前端开发时不需要处理跨域问题
-
-#### `.env.development` / `.env.production`
-环境变量文件。`VITE_API_BASE_URL` 控制 Axios 的 baseURL：
-- 开发环境：`http://localhost:8000`
-- 生产环境：需替换为实际部署的后端地址
-
-#### `package.json`
-npm 脚本：
-- `npm run dev` — 启动开发服务器（带热更新）
-- `npm run build` — 构建生产版本到 `dist/` 目录
-- `npm run preview` — 本地预览生产构建结果
-
----
-
-### 4.2 应用入口
-
-#### `src/main.js`
-Vue 应用的启动文件。做三件事：
-1. 创建 Vue 应用实例
-2. 注册 Ant Design Vue 组件库（全局注册，所有 `a-xxx` 组件都可直接使用）
-3. 注册 Vue Router，挂载到 `#app`
-
-#### `src/App.vue`
-根组件，定义了整个应用的外壳布局：
-- **左侧边栏**：导航菜单（概览、K 线图），可折叠
-- **顶部 Header**：显示后端连接状态（绿点=已连接，红点=离线）
-- **中间内容区**：`<router-view>` 渲染当前页面
-- **底部 Footer**：版权信息
-
-启动时调用 `GET /health` 检测后端是否在线。
-
-#### `src/router/index.js`
-定义两条路由：
 | 路径 | 组件 | 说明 |
 |------|------|------|
-| `/dashboard` | Dashboard.vue | 概览页（默认首页，`/` 重定向到这里） |
+| `/` | Home.vue | 首页，品牌 slogan + 入口按钮 |
+| `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘 |
+| `/scores-overview` | ScoresOverview.vue | 全标的评分速览 |
 | `/chart` | Chart.vue | K 线图查询页 |
+| `/dashboard` | Dashboard.vue | 个股技术分析（评分+指标） |
 
-使用懒加载（`() => import(...)`），页面只在访问时才加载。
+所有路由使用懒加载（`() => import(...)`）。
+
+### 4.2 布局
+
+采用**顶部导航栏**布局：
+- Logo 在左侧，导航链接在右侧
+- 浅色主题（白色背景 + 蓝色高亮）
+- 内容区域最大宽度 1200px 居中
 
 ---
 
-### 4.3 API 调用层
+## 5. 各页面详细说明
 
-#### `src/api/trader.js`
+### 5.1 Home.vue — 首页
+
+品牌展示页，slogan + "查看市场温度"按钮。无 API 调用。
+
+### 5.2 MarketTemperature.vue — 市场温度仪表盘
+
+**API 调用：**
+- `GET /api/market-temperature` — 最新评分
+- `GET /api/market-temperature/history?days=60` — 历史趋势
+
+**页面结构：**
+1. **快速链接** — CNN Fear & Greed Index + VIX 期货价格提示
+2. **顶部概览** — 综合评分（大号数字+颜色标识）、市场状态标签、建议仓位、操作建议、杠杆提示
+3. **维度拆解（3 行）** — 日线技术面[50%] / 周线技术面[35%] / 价格位置[15%]，带进度条
+4. **标的卡片（2 列）** — SPY + QQQ：价格、日RSI、周RSI、MA200偏离度
+5. **历史趋势图** — ECharts 折线图，综合评分 + 建议仓位双 Y 轴
+
+**评分→状态映射（8 级）：**
+| 区间 | 状态 | 操作建议 |
+|------|------|---------|
+| 0~5 | 极端恐慌 | 融资+期权超配 |
+| 5~15 | 极度恐慌 | 重仓逆势买入 |
+| 15~30 | 偏悲观 | 积极加仓 |
+| 30~45 | 略偏冷 | 适度加仓 |
+| 45~55 | 中性 | 维持仓位 |
+| 55~70 | 略偏热 | 适度减仓 |
+| 70~85 | 偏贪婪 | 积极减仓 |
+| 85~100 | 极度贪婪 | 大幅减仓 |
+
+**注意：** 已废弃维度（vol_score/volume_score/safe_haven_score）固定为 null，前端自动过滤不展示。
+
+### 5.3 ScoresOverview.vue — 交易机会速览
+
+**API 调用：**
+- `GET /api/scores/overview` — 全标的评分分组
+
+**页面结构：**
+1. **顶部工具栏** — 日期选择器 + 统计标签（总数/强买/买入/观望）
+2. **三个分组区块**：
+   - 强烈买入（≥90分）— 绿色边框
+   - 建议买入（70~89分）— 橙色边框
+   - 观望（<70分）— 灰色边框
+3. 每个标的卡片显示代码 + 分数，点击跳转到 Dashboard 详情页
+
+**跳转联动：** 点击标的时通过 query 参数传递 `code` 和 `date` 到 Dashboard 页。
+
+### 5.4 Chart.vue — K 线图查询页
+
+**API 调用：**
+- `GET /api/indicators` — K 线+指标数据
+- `GET /api/watchlist` — 标的下拉列表
+
+**页面结构：**
+1. **查询表单** — 标的选择器（支持搜索）、周期选择（日K/周K）、天数输入、查询按钮
+2. **指标开关栏** — 彩色标签按钮，点击切换显隐：MA5/10/20/60、BOLL、成交量、MACD、RSI
+3. **图表区域** — IndicatorChart 组件（多窗格联动）
+
+### 5.5 Dashboard.vue — 个股技术分析
+
+**API 调用：**
+- `GET /api/indicators/latest` — 最新技术指标
+- `GET /api/scores/latest` — 评分（支持 date 参数）
+- `GET /api/watchlist` — 标的列表
+
+**页面结构：**
+1. **工具栏** — 标的选择器 + 日期选择器
+2. **评分卡片** — 综合评分（/100）+ 信号标签 + 6 维度进度条
+3. **技术指标卡片** — OHLC + 成交量
+4. **均线 & 布林带卡片** — MA5/10/20/60 + BOLL 上/中/下
+5. **MACD & RSI 卡片** — DIF、DEA、MACD、RSI14
+
+**评分维度（6 维度连续映射，满分 100）：**
+| 维度 | 权重 | 进度条颜色规则 |
+|------|------|--------------|
+| 周线RSI | 25 | ratio>0.7 绿色高亮 |
+| 日线MACD百分位 | 20 | ratio>0.7 绿色高亮 |
+| 布林带位置 | 15 | ratio>0.7 绿色高亮 |
+| 日线RSI | 20 | ratio>0.7 绿色高亮 |
+| 周线MACD百分位 | 10 | ratio>0.7 绿色高亮 |
+| MA250偏离 | 10 | ratio>0.7 绿色高亮 |
+
+**信号映射：** ≥90 STRONG_BUY / ≥70 BUY / <70 NO_ACTION
+
+**URL query 支持：** `?code=US.NVDA&date=2026-03-27` 可从外部直接跳转到指定标的和日期。
+
+---
+
+## 6. API 调用层
+
+### `src/api/trader.js`
 
 所有后端请求集中在这一个文件中，方便维护。
 
@@ -137,23 +200,25 @@ Vue 应用的启动文件。做三件事：
 - 超时：10 秒
 - 错误拦截器：统一打印错误日志
 
-**导出的函数（当前使用的）：**
+**导出函数：**
 
-| 函数 | 请求 | 参数 | 用在哪里 |
-|------|------|------|----------|
-| `getIndicators(code, ktype, days)` | `GET /api/indicators` | code=标的代码, ktype=1d/1w, days=天数 | Chart.vue |
-| `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | code, ktype | Dashboard.vue |
-| `getScoresLatest(code)` | `GET /api/scores/latest` | code | Dashboard.vue |
-| `getWatchlist()` | `GET /api/watchlist` | 无 | 暂未使用 |
+| 函数 | 请求 | 用在哪里 |
+|------|------|----------|
+| `getWatchlist()` | `GET /api/watchlist` | Chart / Dashboard 标的选择器 |
+| `getIndicators(code, ktype, days)` | `GET /api/indicators` | Chart.vue |
+| `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | Dashboard.vue |
+| `getScoresLatest(code, date?)` | `GET /api/scores/latest` | Dashboard.vue |
+| `getScoresOverview(date?)` | `GET /api/scores/overview` | ScoresOverview.vue |
+| `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature.vue |
+| `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature.vue |
 
-**保留的旧函数（对接旧版 `/v1` 接口，当前未使用）：**
-`getHealth`, `getLatest`, `getHistory`, `getLatestSignal`
+**无数据处理：** 后端无数据时返回 HTTP 200 + `{data: null, message: "..."}`，前端判断 `data === null` 展示 message 提示（同时兼容旧版 404 响应）。
 
 ---
 
-### 4.4 组件
+## 7. 组件
 
-#### `src/components/IndicatorChart.vue`
+### `src/components/IndicatorChart.vue`
 
 **核心图表组件**，基于 ECharts，接收后端返回的数据数组，渲染多窗格联动图表。
 
@@ -179,141 +244,34 @@ Vue 应用的启动文件。做三件事：
 └──────────────────────────────┘
 ```
 
-**动态布局：** 当副图（成交量/MACD/RSI）被关闭时，组件会自动重新计算布局，主图扩大填充空间。
-
-**颜色规范：**
-| 元素 | 颜色 |
-|------|------|
-| 上涨（阳线） | 红色 `#ef5350` |
-| 下跌（阴线） | 绿色 `#26a69a` |
-| MA5 | 橙色 `#ff9800` |
-| MA10 | 蓝色 `#2196f3` |
-| MA20 | 粉色 `#e91e63` |
-| MA60 | 紫色 `#9c27b0` |
-| 布林带 | 棕色 `#795548` |
-| DIF | 橙色 `#ff9800` |
-| DEA | 蓝色 `#2196f3` |
-| RSI14 | 深橙 `#ff5722` |
-
-#### `src/components/KLineChart.vue`（旧，未使用）
-
-基于 LightweightCharts 的旧版图表组件，仅支持 K 线 + SMA/EMA + 布林带，不支持 MACD/RSI 子图。保留供参考，当前没有页面引用它。
+**动态布局：** 当副图被关闭时，组件自动重新计算布局，主图扩大填充空间。
 
 ---
 
-### 4.5 页面
+## 8. 开发指南
 
-#### `src/views/Chart.vue` — K 线图查询页
-
-**业务功能：**
-用户输入标的代码、选择周期和天数，点击查询后展示技术指标图表。页面打开时自动加载 `US.SNDK` 的 250 日数据。
-
-**页面结构：**
-1. **查询表单** — 标的代码输入框（默认 `US.SNDK`）、周期选择（日K/周K）、天数输入（10-500，默认 250）、查询按钮
-2. **指标开关栏** — 彩色标签按钮，点击切换指标显隐：
-   - 均线组：MA5、MA10（默认开）、MA20、MA60（默认关）
-   - 布林带：BOLL（默认开）
-   - 副图组：成交量、MACD、RSI（默认全开）
-3. **图表区域** — IndicatorChart 组件
-
-**数据流：**
-```
-用户点击查询
-  → 调用 getIndicators(code, ktype, days)
-  → 后端返回 { code, ktype, data: [...] }
-  → data 传入 IndicatorChart 组件渲染
-```
-
-#### `src/views/Dashboard.vue` — 概览页
-
-**业务功能：**
-展示 US.SNDK 的最新技术指标数值和评分，页面打开时自动加载。
-
-**页面结构：**
-1. **评分卡片** — 综合评分（颜色标识：>=70 绿色, <=30 红色, 中间黄色）+ 趋势/动量/波动分项
-2. **技术指标卡片** — 日期、OHLC 价格、成交量
-3. **均线 & 布林带卡片** — MA5/10/20/60、BOLL 上/中/下轨
-4. **MACD & RSI 卡片** — DIF、DEA、MACD、RSI14
-
----
-
-## 5. 后端 API 接口
-
-后端为 FastAPI 服务，运行在 `http://localhost:8000`，接口文档：`http://localhost:8000/docs`。
-
-### 5.1 接口列表
-
-#### `GET /api/indicators`
-返回某标的某周期最近 N 根 K 线及全部技术指标，日期升序。
-
-| 参数 | 必填 | 默认 | 说明 |
-|------|------|------|------|
-| `code` | 是 | — | 标的代码，如 `US.SNDK` |
-| `ktype` | 否 | `1d` | 周期，`1d`=日K，`1w`=周K |
-| `days` | 否 | `60` | K 线数量，1-500 |
-
-响应示例（单条数据）：
-```json
-{
-  "code": "US.SNDK",
-  "ktype": "1d",
-  "data": [
-    {
-      "date": "2026-04-21",
-      "open": 927.85, "high": 938.78, "low": 899.2, "close": 903.49,
-      "volume": 10245937,
-      "ma5": 909.74, "ma10": 892.99, "ma20": 778.34, "ma60": 672.19,
-      "ma120": 469.81, "ma250": 258.51,
-      "rsi14": 65.02,
-      "dif": 74.89, "dea": 64.57, "macd": 20.63,
-      "boll_upper": 1028.16, "boll_mid": 778.34, "boll_lower": 528.52,
-      "vol_ma20": 17199597
-    }
-  ]
-}
-```
-
-#### `GET /api/indicators/latest`
-返回最新一根的所有指标值。参数：`code`（必填）、`ktype`（可选）。
-
-#### `GET /api/scores/latest`
-返回最新一次评分。参数：`code`（必填）。
-
-#### `GET /api/watchlist`
-返回所有已入库标的列表。无参数。
-
----
-
-## 6. 开发指南
-
-### 6.1 本地开发流程
+### 8.1 本地开发
 
 ```bash
-# 确保后端在运行
-# http://localhost:8000/docs 能打开说明后端正常
-
-# 安装前端依赖
+# 确保后端在运行：http://localhost:8000/docs
 npm install
-
-# 启动开发服务器
 npm run dev
-
 # 浏览器访问 http://localhost:5173
 ```
 
-Vite 开发服务器会自动把 `/api` 开头的请求代理到后端（`http://localhost:8000`），所以前端代码里不需要写完整的后端地址。
+Vite 代理 `/api` → `http://localhost:8000`，前端代码无需写完整后端地址。
 
-### 6.2 新增页面的步骤
+### 8.2 新增页面步骤
 
-1. 在 `src/views/` 下创建新的 `.vue` 文件
-2. 在 `src/router/index.js` 中添加路由
-3. 在 `src/App.vue` 的侧边栏菜单中添加入口
-4. 如果需要调用新的后端接口，在 `src/api/trader.js` 中添加函数
+1. 在 `src/views/` 创建 `.vue` 文件
+2. 在 `src/router/index.js` 添加路由
+3. 在 `src/App.vue` 导航栏添加链接
+4. 如需新接口，在 `src/api/trader.js` 添加函数
 
-### 6.3 生产部署
+### 8.3 生产部署
 
 ```bash
 npm run build   # 生成 dist/ 目录
 ```
 
-`dist/` 是纯静态文件，可以用 Nginx、Caddy 或任何静态文件服务器托管。API 请求需通过反向代理转发到后端。
+`dist/` 是纯静态文件，可用 Nginx/Caddy 托管。API 请求需通过反向代理转发到后端。

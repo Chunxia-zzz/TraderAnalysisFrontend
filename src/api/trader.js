@@ -27,8 +27,11 @@ export const getIndicatorsLatest = (code, ktype = '1d') =>
   client.get('/api/indicators/latest', { params: { code, ktype } })
 
 // ── 评分 ──
-export const getScoresLatest = (code) =>
-  client.get('/api/scores/latest', { params: { code } })
+export const getScoresLatest = (code, date) =>
+  client.get('/api/scores/latest', { params: { code, ...(date ? { date } : {}) } })
+
+export const getScoresOverview = (date) =>
+  client.get('/api/scores/overview', { params: { ...(date ? { date } : {}) } })
 
 // ── 市场温度 ──
 export const getMarketTemperature = () =>
