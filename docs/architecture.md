@@ -1,6 +1,6 @@
 # TraderAnalysis Frontend — 技术方案
 
-> 更新日期：2026-05-05
+> 更新日期：2026-05-07
 
 ---
 
@@ -14,11 +14,15 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 
 | 场景 | 描述 |
 |------|------|
+| 登录认证 | JWT 登录，角色区分（admin/member），保护功能页面 |
 | 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议 |
 | 交易机会速览 | 一眼看清所有标的评分分布，哪些触发买入信号 |
 | 查看 K 线图 | 选择标的和周期，查看蜡烛图及叠加的技术指标 |
 | 个股技术分析 | 查看某标的最新技术指标数值和评分（6 维度连续映射） |
-| 切换指标显隐 | 通过页面按钮控制均线、布林带、成交量、MACD、RSI 的显示/隐藏 |
+| 基本面分析 | 全标的基本面评分速览（5 因子），单只详情弹窗 |
+| 标的池管理 | 增删改查标的，筛选/搜索，刷新快照（admin） |
+| 条件选股 | 按市值/PE/价格/行业筛选，一键加入标的池 |
+| 修改密码 | 设置页查看用户信息、修改密码 |
 
 ---
 
@@ -33,7 +37,7 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 | **Ant Design Vue** | ^4.2 | UI 组件库 | 提供布局、卡片、表单、标签、描述列表、日期选择器等 60+ 组件 |
 | **ECharts** | ^6.0 | 图表渲染 | 原生支持 K 线蜡烛图 + 多窗格联动，适合金融场景 |
 | **Axios** | ^1.7 | HTTP 客户端 | 拦截器、超时控制、错误统一处理 |
-| **Vue Router** | ^4.4 | 路由 | SPA 页面导航，支持懒加载 |
+| **Vue Router** | ^4.4 | 路由 | SPA 页面导航，支持懒加载 + 路由守卫 |
 | **Day.js** | — | 日期处理 | Ant Design Vue DatePicker 依赖 |
 
 ### 2.2 为什么用 ECharts 而不是 LightweightCharts
@@ -61,52 +65,104 @@ TraderAnalysisFrontend/
 │
 └── src/                          # 源代码
     ├── main.js                   # 应用入口
-    ├── App.vue                   # 根组件（顶部导航布局）
-    ├── router/index.js           # 路由配置
-    ├── api/trader.js             # API 调用层
+    ├── App.vue                   # 根组件（顶部导航 + 健康检查 + 登出）
+    ├── router/index.js           # 路由配置 + 全局前置守卫
+    ├── api/trader.js             # API 调用层（含认证拦截器）
     ├── components/               # 可复用组件
     │   ├── IndicatorChart.vue    # ECharts 图表组件
     │   └── KLineChart.vue        # 旧图表组件（未使用）
     └── views/                    # 页面
-        ├── Home.vue              # 首页（品牌 slogan）
+        ├── Home.vue              # 首页（品牌 slogan + 登录入口）
+        ├── Login.vue             # 登录页
         ├── MarketTemperature.vue # 市场温度仪表盘
         ├── ScoresOverview.vue    # 交易机会速览
         ├── Chart.vue             # K 线图查询页
-        └── Dashboard.vue         # 个股技术分析
+        ├── Dashboard.vue         # 个股技术分析
+        ├── Fundamental.vue       # 基本面分析
+        ├── WatchlistManage.vue   # 标的池管理（admin）
+        ├── StockFilter.vue       # 条件选股
+        └── Settings.vue          # 设置（用户信息 + 修改密码）
 ```
 
 ---
 
-## 4. 页面与路由
+## 4. 认证系统
 
-### 4.1 路由表
+### 4.1 认证流程
 
-| 路径 | 组件 | 说明 |
-|------|------|------|
-| `/` | Home.vue | 首页，品牌 slogan + 入口按钮 |
-| `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘 |
-| `/scores-overview` | ScoresOverview.vue | 全标的评分速览 |
-| `/chart` | Chart.vue | K 线图查询页 |
-| `/dashboard` | Dashboard.vue | 个股技术分析（评分+指标） |
+```
+1. 用户访问功能页 → 路由守卫检查 localStorage 中是否有 token
+2. 无 token → 重定向到 /login
+3. 登录成功 → 后端返回 {access_token, role} → 存入 localStorage
+4. 后续请求 → Axios 请求拦截器自动附加 Authorization: Bearer <token>
+5. 收到 401 → 响应拦截器清除 token+role → 跳转 /login
+```
+
+### 4.2 公开页面
+
+| 路由 | 说明 |
+|------|------|
+| `/` | 首页（所有人可看，提供登录按钮） |
+| `/login` | 登录页 |
+
+### 4.3 权限控制
+
+- `role = admin`：可见「标的管理」导航入口
+- `role = member`：只读访问（未来扩展）
+- 导航栏根据登录状态显示「登录」或「登出」
+
+### 4.4 Token 管理
+
+| localStorage key | 内容 | 写入时机 |
+|-----------------|------|---------|
+| `token` | JWT access_token | 登录成功 |
+| `role` | `admin` / `member` | 登录成功 |
+
+---
+
+## 5. 页面与路由
+
+### 5.1 路由表
+
+| 路径 | 组件 | 认证 | 说明 |
+|------|------|------|------|
+| `/` | Home.vue | 公开 | 首页，品牌 slogan + 登录/入口按钮 |
+| `/login` | Login.vue | 公开 | 登录页 |
+| `/market-temperature` | MarketTemperature.vue | 需登录 | 市场温度仪表盘 |
+| `/scores-overview` | ScoresOverview.vue | 需登录 | 全标的评分速览 |
+| `/chart` | Chart.vue | 需登录 | K 线图查询页 |
+| `/dashboard` | Dashboard.vue | 需登录 | 个股技术分析 |
+| `/fundamental` | Fundamental.vue | 需登录 | 基本面分析速览+详情 |
+| `/stock-filter` | StockFilter.vue | 需登录 | 条件选股 |
+| `/watchlist-manage` | WatchlistManage.vue | 需登录 | 标的池管理（admin 可见） |
+| `/settings` | Settings.vue | 需登录 | 用户信息 + 修改密码 |
 
 所有路由使用懒加载（`() => import(...)`）。
 
-### 4.2 布局
+### 5.2 布局
 
 采用**顶部导航栏**布局：
 - Logo 在左侧，导航链接在右侧
 - 浅色主题（白色背景 + 蓝色高亮）
-- 内容区域最大宽度 1200px 居中
+- 内容区域最大宽度 1400px 居中
+- 后端状态指示灯（绿/红点）
+- 登录页不显示顶部导航
 
 ---
 
-## 5. 各页面详细说明
+## 6. 各页面详细说明
 
-### 5.1 Home.vue — 首页
+### 6.1 Home.vue — 首页
 
-品牌展示页，slogan + "查看市场温度"按钮。无 API 调用。
+品牌展示页，价值投资理念 + "查看市场温度"按钮 + 登录按钮（未登录时显示）。无后端 API 调用。
 
-### 5.2 MarketTemperature.vue — 市场温度仪表盘
+### 6.2 Login.vue — 登录页
+
+**API 调用：** `POST /api/auth/login`
+
+居中卡片表单（用户名 + 密码），登录成功后存储 token/role 并跳转首页。后端登录失败返回 200 + `{data: null, message}`，前端判断 `access_token` 是否存在。
+
+### 6.3 MarketTemperature.vue — 市场温度仪表盘
 
 **API 调用：**
 - `GET /api/market-temperature` — 最新评分
@@ -114,161 +170,130 @@ TraderAnalysisFrontend/
 
 **页面结构：**
 1. **快速链接** — CNN Fear & Greed Index + VIX 期货价格提示
-2. **顶部概览** — 综合评分（大号数字+颜色标识）、市场状态标签、建议仓位、操作建议、杠杆提示
-3. **维度拆解（3 行）** — 日线技术面[50%] / 周线技术面[35%] / 价格位置[15%]，带进度条
+2. **顶部概览** — 综合评分、市场状态标签、建议仓位、操作建议、杠杆提示
+3. **维度拆解（3 行）** — 日线技术面[50%] / 周线技术面[35%] / 价格位置[15%]
 4. **标的卡片（2 列）** — SPY + QQQ：价格、日RSI、周RSI、MA200偏离度
 5. **历史趋势图** — ECharts 折线图，综合评分 + 建议仓位双 Y 轴
 
-**评分→状态映射（8 级）：**
-| 区间 | 状态 | 操作建议 |
-|------|------|---------|
-| 0~5 | 极端恐慌 | 融资+期权超配 |
-| 5~15 | 极度恐慌 | 重仓逆势买入 |
-| 15~30 | 偏悲观 | 积极加仓 |
-| 30~45 | 略偏冷 | 适度加仓 |
-| 45~55 | 中性 | 维持仓位 |
-| 55~70 | 略偏热 | 适度减仓 |
-| 70~85 | 偏贪婪 | 积极减仓 |
-| 85~100 | 极度贪婪 | 大幅减仓 |
+### 6.4 ScoresOverview.vue — 交易机会速览
 
-**注意：** 已废弃维度（vol_score/volume_score/safe_haven_score）固定为 null，前端自动过滤不展示。
+**API 调用：** `GET /api/scores/overview`
 
-### 5.3 ScoresOverview.vue — 交易机会速览
+三组分区展示（强烈买入/建议买入/观望），支持日期切换，点击跳转 Dashboard 详情。
 
-**API 调用：**
-- `GET /api/scores/overview` — 全标的评分分组
+### 6.5 Chart.vue — K 线图查询页
 
-**页面结构：**
-1. **顶部工具栏** — 日期选择器 + 统计标签（总数/强买/买入/观望）
-2. **三个分组区块**：
-   - 强烈买入（≥90分）— 绿色边框
-   - 建议买入（70~89分）— 橙色边框
-   - 观望（<70分）— 灰色边框
-3. 每个标的卡片显示代码 + 分数，点击跳转到 Dashboard 详情页
+**API 调用：** `GET /api/indicators` + `GET /api/watchlist`
 
-**跳转联动：** 点击标的时通过 query 参数传递 `code` 和 `date` 到 Dashboard 页。
+标的选择器 + 蜡烛图 + MA/布林带/成交量/MACD/RSI 多窗格联动，指标可切换显隐。
 
-### 5.4 Chart.vue — K 线图查询页
+### 6.6 Dashboard.vue — 个股技术分析
+
+**API 调用：** `GET /api/indicators/latest` + `GET /api/scores/latest` + `GET /api/watchlist`
+
+6 维度连续评分（进度条），技术指标数值面板，支持日期选择查看历史。
+
+### 6.7 Fundamental.vue — 基本面分析
 
 **API 调用：**
-- `GET /api/indicators` — K 线+指标数据
-- `GET /api/watchlist` — 标的下拉列表
+- `GET /api/fundamental/overview` — 全标的基本面速览
+- `GET /api/fundamental/latest?code=XXX` — 单只详情
 
 **页面结构：**
-1. **查询表单** — 标的选择器（支持搜索）、周期选择（日K/周K）、天数输入、查询按钮
-2. **指标开关栏** — 彩色标签按钮，点击切换显隐：MA5/10/20/60、BOLL、成交量、MACD、RSI
-3. **图表区域** — IndicatorChart 组件（多窗格联动）
+1. **统计卡片** — 低估/合理/高估/跳过 数量
+2. **三组分区表格** — UNDERVALUED / FAIR / OVERVALUED
+3. **详情弹窗** — 5因子评分分解 + 估值/分析师/成长性/财务健康明细
 
-### 5.5 Dashboard.vue — 个股技术分析
+**5 因子（满分 100）：** 估值折价(30) / PE合理性(20) / 成长性(20) / 财务健康(15) / 分析师共识(15)
 
-**API 调用：**
-- `GET /api/indicators/latest` — 最新技术指标
-- `GET /api/scores/latest` — 评分（支持 date 参数）
-- `GET /api/watchlist` — 标的列表
+### 6.8 WatchlistManage.vue — 标的池管理（admin）
 
-**页面结构：**
-1. **工具栏** — 标的选择器 + 日期选择器
-2. **评分卡片** — 综合评分（/100）+ 信号标签 + 6 维度进度条
-3. **技术指标卡片** — OHLC + 成交量
-4. **均线 & 布林带卡片** — MA5/10/20/60 + BOLL 上/中/下
-5. **MACD & RSI 卡片** — DIF、DEA、MACD、RSI14
+**API 调用：** `GET/POST/PATCH/DELETE /api/watchlist` + `POST /api/watchlist/refresh-snapshot`
 
-**评分维度（6 维度连续映射，满分 100）：**
-| 维度 | 权重 | 进度条颜色规则 |
-|------|------|--------------|
-| 周线RSI | 25 | ratio>0.7 绿色高亮 |
-| 日线MACD百分位 | 20 | ratio>0.7 绿色高亮 |
-| 布林带位置 | 15 | ratio>0.7 绿色高亮 |
-| 日线RSI | 20 | ratio>0.7 绿色高亮 |
-| 周线MACD百分位 | 10 | ratio>0.7 绿色高亮 |
-| MA250偏离 | 10 | ratio>0.7 绿色高亮 |
+表格展示全部标的，支持分类/状态/市场筛选和搜索。新增/编辑弹窗，删除确认，刷新快照。
 
-**信号映射：** ≥90 STRONG_BUY / ≥70 BUY / <70 NO_ACTION
+### 6.9 StockFilter.vue — 条件选股
 
-**URL query 支持：** `?code=US.NVDA&date=2026-03-27` 可从外部直接跳转到指定标的和日期。
+**API 调用：** `GET /api/stock-filter/search` + `GET /api/stock-filter/info` + `POST /api/watchlist`
+
+筛选条件表单，结果表格，详情弹窗，一键加入标的池。需 OpenD 在线。
+
+### 6.10 Settings.vue — 设置页
+
+**API 调用：** `GET /api/auth/me` + `POST /api/auth/change-password`
+
+用户信息展示 + 修改密码表单。
 
 ---
 
-## 6. API 调用层
+## 7. API 调用层
 
 ### `src/api/trader.js`
 
-所有后端请求集中在这一个文件中，方便维护。
+所有后端请求集中在这一个文件中。
 
 **Axios 实例配置：**
-- baseURL：从环境变量读取，默认 `http://localhost:8000`
+- baseURL：从环境变量 `VITE_API_BASE_URL` 读取，默认 `http://localhost:8000`
 - 超时：10 秒
-- 错误拦截器：统一打印错误日志
+- 请求拦截器：自动附加 `Authorization: Bearer <token>`
+- 响应拦截器：401 清除 token/role → 跳转 /login
 
-**导出函数：**
+**导出函数（20 个）：**
 
-| 函数 | 请求 | 用在哪里 |
-|------|------|----------|
-| `getWatchlist()` | `GET /api/watchlist` | Chart / Dashboard 标的选择器 |
-| `getIndicators(code, ktype, days)` | `GET /api/indicators` | Chart.vue |
-| `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | Dashboard.vue |
-| `getScoresLatest(code, date?)` | `GET /api/scores/latest` | Dashboard.vue |
-| `getScoresOverview(date?)` | `GET /api/scores/overview` | ScoresOverview.vue |
-| `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature.vue |
-| `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature.vue |
-
-**无数据处理：** 后端无数据时返回 HTTP 200 + `{data: null, message: "..."}`，前端判断 `data === null` 展示 message 提示（同时兼容旧版 404 响应）。
+| 函数 | 请求 | 页面 |
+|------|------|------|
+| `getHealth()` | `GET /health` | App.vue |
+| `getAuthMe()` | `GET /api/auth/me` | Settings |
+| `changePassword(old, new)` | `POST /api/auth/change-password` | Settings |
+| `getWatchlist(params?)` | `GET /api/watchlist` | 多处 |
+| `getWatchlistDetail(code)` | `GET /api/watchlist/{code}` | — |
+| `addWatchlistStock(payload)` | `POST /api/watchlist` | WatchlistManage / StockFilter |
+| `updateWatchlistStock(code, payload)` | `PATCH /api/watchlist/{code}` | WatchlistManage |
+| `deleteWatchlistStock(code)` | `DELETE /api/watchlist/{code}` | WatchlistManage |
+| `batchAddWatchlist(payload)` | `POST /api/watchlist/batch` | WatchlistManage |
+| `refreshSnapshot(code?)` | `POST /api/watchlist/refresh-snapshot` | WatchlistManage |
+| `stockFilterSearch(params)` | `GET /api/stock-filter/search` | StockFilter |
+| `stockFilterInfo(code)` | `GET /api/stock-filter/info` | StockFilter |
+| `getFundamentalLatest(code)` | `GET /api/fundamental/latest` | Fundamental |
+| `getFundamentalOverview()` | `GET /api/fundamental/overview` | Fundamental |
+| `getIndicators(code, ktype, days)` | `GET /api/indicators` | Chart |
+| `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | Dashboard |
+| `getScoresLatest(code, date?)` | `GET /api/scores/latest` | Dashboard |
+| `getScoresOverview(date?)` | `GET /api/scores/overview` | ScoresOverview |
+| `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature |
+| `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature |
 
 ---
 
-## 7. 组件
+## 8. 组件
 
 ### `src/components/IndicatorChart.vue`
 
-**核心图表组件**，基于 ECharts，接收后端返回的数据数组，渲染多窗格联动图表。
+基于 ECharts 的多窗格联动图表组件。
 
-**Props：**
-| 名称 | 类型 | 说明 |
-|------|------|------|
-| `data` | Array | 后端 `/api/indicators` 返回的 `data` 数组 |
-| `height` | Number | 图表高度（px），默认 800 |
-| `visible` | Object | 各指标显隐控制，如 `{ ma5: true, macd: false, ... }` |
+**Props：** `data`(Array) / `height`(Number, 默认800) / `visible`(Object, 各指标显隐)
 
-**图表结构：**
-```
-┌──────────────────────────────┐
-│  主图：K 线 + MA + 布林带     │  ← 始终显示
-├──────────────────────────────┤
-│  成交量：柱状图 + VOL MA20    │  ← 可隐藏
-├──────────────────────────────┤
-│  MACD：DIF/DEA 线 + 柱状图   │  ← 可隐藏
-├──────────────────────────────┤
-│  RSI：RSI14 + 超买/超卖线    │  ← 可隐藏
-├──────────────────────────────┤
-│  ═══ 时间轴滑块(DataZoom) ═══ │  ← 拖拽缩放，四窗格联动
-└──────────────────────────────┘
-```
-
-**动态布局：** 当副图被关闭时，组件自动重新计算布局，主图扩大填充空间。
+**图表结构：** 主图(K线+MA+布林) → 成交量 → MACD → RSI → DataZoom（四窗格联动）
 
 ---
 
-## 8. 开发指南
+## 9. 开发指南
 
-### 8.1 本地开发
+### 9.1 本地开发
 
 ```bash
-# 确保后端在运行：http://localhost:8000/docs
 npm install
-npm run dev
-# 浏览器访问 http://localhost:5173
+npm run dev   # http://localhost:5173
 ```
 
-Vite 代理 `/api` → `http://localhost:8000`，前端代码无需写完整后端地址。
-
-### 8.2 新增页面步骤
+### 9.2 新增页面步骤
 
 1. 在 `src/views/` 创建 `.vue` 文件
-2. 在 `src/router/index.js` 添加路由
+2. 在 `src/router/index.js` 添加路由（需认证的不加 `meta: { public: true }`）
 3. 在 `src/App.vue` 导航栏添加链接
 4. 如需新接口，在 `src/api/trader.js` 添加函数
 
-### 8.3 生产部署
+### 9.3 生产部署
 
 ```bash
 npm run build   # 生成 dist/ 目录

@@ -3,19 +3,23 @@
     <div class="hero">
       <h1 class="title">用数据感知市场温度，用纪律对抗人性弱点</h1>
       <div class="subtitle">
-        <p>市场永远在恐惧和贪婪之间摆动。</p>
-        <p>当所有人恐慌时，机会正在孕育；当所有人亢奋时，风险已经积聚。</p>
-        <p>我们不预测市场，我们量化情绪、追踪趋势、计算概率。</p>
-        <p>系统化交易的本质，是把决策权从情绪手中夺回来。</p>
+        <p>买股票就是买公司的一部分所有权。</p>
+        <p>市场先生提供的是服务，而非指导 —— 在其极度沮丧之时执行买入，在其极度自满之时适度减仓。</p>
+        <p>投资必须要有充足的安全边际，明白自己的能力圈边界，绝不让本金蒙受损失。</p>
+        <p>财富是经济体中的购买力占比。价值投资的目标，是在最具活力的经济体中持有最有活力公司的股份，以此保持和增长财富。</p>
       </div>
       <div class="cta">
         <router-link to="/market-temperature" class="cta-btn">查看市场温度</router-link>
+        <router-link v-if="!isLoggedIn" to="/login" class="cta-btn login-btn">登录</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
+const isLoggedIn = computed(() => !!localStorage.getItem('token'))
 </script>
 
 <style scoped>
@@ -68,5 +72,18 @@
 
 .cta-btn:hover {
   opacity: 0.8;
+}
+
+.login-btn {
+  margin-left: 16px;
+  background: transparent;
+  color: #1890ff;
+  border: 1px solid #1890ff;
+}
+
+.login-btn:hover {
+  background: #1890ff;
+  color: #fff;
+  opacity: 1;
 }
 </style>

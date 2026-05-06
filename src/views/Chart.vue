@@ -149,7 +149,7 @@ async function loadWatchlist() {
     const list = (data.watchlist || []).filter((item) => item.has_data)
     watchlistOptions.value = list.map((item) => ({
       label: `${item.ticker} - ${item.name}`,
-      value: item.futu_code,
+      value: item.code,
     }))
     if (watchlistOptions.value.length > 0 && !code.value) {
       code.value = watchlistOptions.value[0].value

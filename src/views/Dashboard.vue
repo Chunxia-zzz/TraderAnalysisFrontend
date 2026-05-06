@@ -221,7 +221,7 @@ onMounted(async () => {
     const list = (data.watchlist || []).filter((item) => item.has_data)
     watchlistOptions.value = list.map((item) => ({
       label: `${item.ticker} - ${item.name}`,
-      value: item.futu_code,
+      value: item.code,
     }))
     // 支持从 URL query 传入 code 和 date（如从机会速览页跳转）
     const queryCode = route.query.code
