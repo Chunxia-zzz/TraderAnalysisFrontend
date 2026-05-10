@@ -1,7 +1,7 @@
 <template>
   <div class="home">
     <div class="hero">
-      <h1 class="title">用数据感知市场温度，用纪律对抗人性弱点</h1>
+      <h1 class="title">在最好的经济体中，持有最好的公司</h1>
       <div class="subtitle">
         <p>买股票就是买公司的一部分所有权。</p>
         <p>市场先生提供的是服务，而非指导 —— 在其极度沮丧之时执行买入，在其极度自满之时适度减仓。</p>
@@ -10,16 +10,12 @@
       </div>
       <div class="cta">
         <router-link to="/market-temperature" class="cta-btn">查看市场温度</router-link>
-        <router-link v-if="!isLoggedIn" to="/login" class="cta-btn login-btn">登录</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
-
-const isLoggedIn = computed(() => !!localStorage.getItem('token'))
 </script>
 
 <style scoped>
@@ -51,7 +47,11 @@ const isLoggedIn = computed(() => !!localStorage.getItem('token'))
 }
 
 .subtitle p {
-  margin: 0;
+  margin: 0 0 12px 0;
+}
+
+.subtitle p:last-child {
+  margin-bottom: 0;
 }
 
 .cta {
@@ -74,16 +74,4 @@ const isLoggedIn = computed(() => !!localStorage.getItem('token'))
   opacity: 0.8;
 }
 
-.login-btn {
-  margin-left: 16px;
-  background: transparent;
-  color: #1890ff;
-  border: 1px solid #1890ff;
-}
-
-.login-btn:hover {
-  background: #1890ff;
-  color: #fff;
-  opacity: 1;
-}
 </style>

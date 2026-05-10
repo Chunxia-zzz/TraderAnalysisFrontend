@@ -7,11 +7,6 @@
           <a-select v-model:value="filters.category" placeholder="分类" allow-clear style="width: 120px" @change="fetchList">
             <a-select-option v-for="(label, key) in categories" :key="key" :value="key">{{ label }}</a-select-option>
           </a-select>
-          <a-select v-model:value="filters.status" placeholder="状态" allow-clear style="width: 120px" @change="fetchList">
-            <a-select-option value="watching">观察中</a-select-option>
-            <a-select-option value="holding">持仓中</a-select-option>
-            <a-select-option value="exited">已退出</a-select-option>
-          </a-select>
           <a-select v-model:value="filters.market" placeholder="市场" allow-clear style="width: 100px" @change="fetchList">
             <a-select-option value="US">美股</a-select-option>
             <a-select-option value="HK">港股</a-select-option>
@@ -38,8 +33,11 @@
           <template v-if="column.key === 'tags'">
             <a-tag v-for="t in record.tags" :key="t" size="small">{{ t }}</a-tag>
           </template>
-          <template v-if="column.key === 'status'">
-            <a-tag :color="statusColor(record.status)">{{ statusLabel(record.status) }}</a-tag>
+          <template v-if="column.key === 'recommended_strategy'">
+            <a-tag v-if="record.recommended_strategy" :color="strategyColor(record.recommended_strategy)">
+              {{ strategyLabel(record.recommended_strategy) }}
+            </a-tag>
+            <span v-else style="color: #999">-</span>
           </template>
           <template v-if="column.key === 'action'">
             <a-space>
@@ -111,6 +109,16 @@
         <a-form-item label="晨星公允价值">
           <a-input-number v-model:value="editForm.morningstar_fair_value" style="width: 100%" />
         </a-form-item>
+        <a-form-item label="推荐策略">
+          <a-select v-model:value="editForm.recommended_strategy" allow-clear placeholder="选择策略">
+            <a-select-option value="hold_10d">持有10天（稳健大票）</a-select-option>
+            <a-select-option value="hold_20d">持有20天（中长线）</a-select-option>
+            <a-select-option value="swing">波段操作（周期性回调股）</a-select-option>
+            <a-select-option value="trend_ma5">趋势MA5（高弹性成长股）</a-select-option>
+            <a-select-option value="trend_ma10">趋势MA10（强势主线）</a-select-option>
+            <a-select-option value="trend_ma20">趋势MA20（长趋势）</a-select-option>
+          </a-select>
+        </a-form-item>
       </a-form>
     </a-modal>
   </div>
@@ -132,8 +140,8 @@ const columns = [
   { title: '代码', dataIndex: 'code', key: 'code', width: 100 },
   { title: '名称', dataIndex: 'name', key: 'name', width: 140 },
   { title: '分类', dataIndex: 'category', key: 'category', width: 80 },
-  { title: '状态', key: 'status', width: 80 },
   { title: '当前价', dataIndex: 'current_price', key: 'current_price', width: 80 },
+  { title: '推荐策略', key: 'recommended_strategy', width: 140 },
   { title: 'Forward PE', dataIndex: 'forward_pe', key: 'forward_pe', width: 100 },
   { title: '分析师目标', dataIndex: 'analyst_target_mean', key: 'analyst_target_mean', width: 100 },
   { title: '晨星公允', dataIndex: 'morningstar_fair_value', key: 'morningstar_fair_value', width: 100 },
@@ -146,6 +154,22 @@ function statusColor(s) {
 }
 function statusLabel(s) {
   return { watching: '观察中', holding: '持仓中', exited: '已退出' }[s] || s
+}
+
+const STRATEGY_MAP = {
+  hold_10d: { label: '持有10天', color: 'blue' },
+  hold_20d: { label: '持有20天', color: 'cyan' },
+  swing: { label: '波段操作', color: 'orange' },
+  trend_ma5: { label: '趋势MA5', color: 'green' },
+  trend_ma10: { label: '趋势MA10', color: 'lime' },
+  trend_ma20: { label: '趋势MA20', color: 'volcano' },
+}
+
+function strategyLabel(s) {
+  return STRATEGY_MAP[s]?.label || s
+}
+function strategyColor(s) {
+  return STRATEGY_MAP[s]?.color || 'default'
 }
 
 async function fetchList() {
@@ -201,7 +225,7 @@ async function handleAdd() {
 
 // 编辑
 const editVisible = ref(false)
-const editForm = reactive({ code: '', category: '', status: '', tagsStr: '', thesis: '', notes: '', target_price: null, forward_pe: null, analyst_target_mean: null, morningstar_fair_value: null })
+const editForm = reactive({ code: '', category: '', status: '', tagsStr: '', thesis: '', notes: '', target_price: null, forward_pe: null, analyst_target_mean: null, morningstar_fair_value: null, recommended_strategy: null })
 
 function showEditModal(record) {
   Object.assign(editForm, {
@@ -215,6 +239,7 @@ function showEditModal(record) {
     forward_pe: record.forward_pe,
     analyst_target_mean: record.analyst_target_mean,
     morningstar_fair_value: record.morningstar_fair_value,
+    recommended_strategy: record.recommended_strategy || null,
   })
   editVisible.value = true
 }
@@ -232,6 +257,7 @@ async function handleEdit() {
     payload.forward_pe = editForm.forward_pe
     payload.analyst_target_mean = editForm.analyst_target_mean
     payload.morningstar_fair_value = editForm.morningstar_fair_value
+    payload.recommended_strategy = editForm.recommended_strategy || null
     await updateWatchlistStock(editForm.code, payload)
     message.success('更新成功')
     editVisible.value = false

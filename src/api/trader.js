@@ -1,41 +1,12 @@
 import axios from 'axios'
-import router from '../router'
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
   timeout: 10000,
 })
 
-// 请求拦截器：自动附加 token
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// 响应拦截器：401 时清除 token 并跳转登录
-client.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('role')
-      router.replace('/login')
-    }
-    console.error('[API Error]', error.config?.url, error.message)
-    return Promise.reject(error)
-  }
-)
-
 // ── 健康检查 ──
 export const getHealth = () => client.get('/health')
-
-// ── 认证 ──
-export const getAuthMe = () => client.get('/api/auth/me')
-export const changePassword = (old_password, new_password) =>
-  client.post('/api/auth/change-password', { old_password, new_password })
 
 // ── 标的池 ──
 export const getWatchlist = (params) => client.get('/api/watchlist', { params })
@@ -78,3 +49,14 @@ export const getMarketTemperature = () =>
 
 export const getMarketTemperatureHistory = (days = 30) =>
   client.get('/api/market-temperature/history', { params: { days } })
+
+// ── 信号回测 ──
+export const getBacktestRun = (params) =>
+  client.get('/api/backtest/run', { params, timeout: 30000 })
+
+// ── 网格交易 ──
+export const getGridStatus = (configId) =>
+  client.get('/api/grid/status', { params: { config_id: configId } })
+
+export const getGridOrders = (configId, limit = 50) =>
+  client.get('/api/grid/orders', { params: { config_id: configId, limit } })

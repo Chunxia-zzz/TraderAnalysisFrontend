@@ -12,9 +12,11 @@
           @change="loadData"
         />
         <template v-if="overview">
-          <a-tag>共 {{ overview.total_count }} 只标的</a-tag>
+          <a-tag>共 {{ overview.total_count }} 只</a-tag>
           <a-tag color="green">强买 {{ overview.summary.strong_buy_count }}</a-tag>
           <a-tag color="lime">买入 {{ overview.summary.buy_count }}</a-tag>
+          <a-tag color="orange">可执行 {{ overview.summary.actionable_count }}</a-tag>
+          <a-tag color="volcano">主升浪 {{ overview.summary.momentum_leaders_count }}</a-tag>
           <a-tag>观望 {{ overview.summary.no_action_count }}</a-tag>
         </template>
       </a-space>
@@ -22,17 +24,67 @@
 
     <a-spin :spinning="loading">
       <template v-if="overview">
+        <!-- 可执行机会 -->
+        <a-card
+          v-if="overview.actionable && overview.actionable.length > 0"
+          title="可执行机会（评分达标 + 站上MA5）"
+          size="small"
+          style="margin-bottom: 16px; border-left: 3px solid #1890ff"
+        >
+          <a-row :gutter="[12, 12]">
+            <a-col v-for="item in overview.actionable" :key="item.code" :xs="12" :md="6">
+              <div class="stock-card actionable" @click="goDetail(item)">
+                <div class="stock-left">
+                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                  <div class="stock-meta">
+                    <span class="ma5-tag confirmed">MA5确认</span>
+                  </div>
+                </div>
+                <div class="stock-score actionable-score">{{ item.total_score.toFixed(1) }}</div>
+              </div>
+            </a-col>
+          </a-row>
+        </a-card>
+
+        <!-- 主升浪龙头 -->
+        <a-card
+          v-if="overview.momentum_leaders && overview.momentum_leaders.length > 0"
+          title="主升浪龙头（动量评分≥70）"
+          size="small"
+          style="margin-bottom: 16px; border-left: 3px solid #f5222d"
+        >
+          <a-row :gutter="[12, 12]">
+            <a-col v-for="item in overview.momentum_leaders" :key="item.code" :xs="12" :md="6">
+              <div class="stock-card momentum" @click="goDetail(item)">
+                <div class="stock-left">
+                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                  <div class="stock-meta">
+                    <span class="momentum-badge">动量 {{ item.momentum_score }}</span>
+                  </div>
+                </div>
+                <div class="stock-score momentum-score">{{ item.total_score.toFixed(1) }}</div>
+              </div>
+            </a-col>
+          </a-row>
+        </a-card>
+
         <!-- STRONG_BUY -->
         <a-card
           v-if="overview.strong_buy.length > 0"
-          title="强烈买入 (≥90)"
+          title="强烈买入 (≥80)"
           size="small"
           style="margin-bottom: 16px; border-left: 3px solid #52c41a"
         >
           <a-row :gutter="[12, 12]">
             <a-col v-for="item in overview.strong_buy" :key="item.code" :xs="12" :md="6">
               <div class="stock-card strong-buy" @click="goDetail(item)">
-                <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                <div class="stock-left">
+                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                  <div class="stock-meta">
+                    <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
+                    <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+                  </div>
+                </div>
                 <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
               </div>
             </a-col>
@@ -42,14 +94,20 @@
         <!-- BUY -->
         <a-card
           v-if="overview.buy.length > 0"
-          title="建议买入 (70~89)"
+          title="建议买入 (60~79)"
           size="small"
           style="margin-bottom: 16px; border-left: 3px solid #faad14"
         >
           <a-row :gutter="[12, 12]">
             <a-col v-for="item in overview.buy" :key="item.code" :xs="12" :md="6">
               <div class="stock-card buy" @click="goDetail(item)">
-                <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                <div class="stock-left">
+                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                  <div class="stock-meta">
+                    <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
+                    <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+                  </div>
+                </div>
                 <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
               </div>
             </a-col>
@@ -58,14 +116,19 @@
 
         <!-- NO_ACTION -->
         <a-card
-          title="观望 (<70)"
+          title="观望 (<60)"
           size="small"
           style="margin-bottom: 16px; border-left: 3px solid #999"
         >
           <a-row :gutter="[12, 12]">
             <a-col v-for="item in overview.no_action" :key="item.code" :xs="12" :md="6">
               <div class="stock-card no-action" @click="goDetail(item)">
-                <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                <div class="stock-left">
+                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                  <div class="stock-meta">
+                    <span v-if="item.momentum_score >= 70" class="momentum-badge">动量 {{ item.momentum_score }}</span>
+                  </div>
+                </div>
                 <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
               </div>
             </a-col>
@@ -147,10 +210,58 @@ onMounted(loadData)
   border: 1px solid #d9d9d9;
 }
 
+.stock-card.actionable {
+  border: 1px solid #1890ff;
+  background: #e6f7ff;
+}
+
+.stock-card.momentum {
+  border: 1px solid #f5222d;
+  background: #fff1f0;
+}
+
+.stock-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .stock-code {
   font-weight: 600;
   font-size: 14px;
   color: #1a1a1a;
+}
+
+.stock-meta {
+  display: flex;
+  gap: 6px;
+}
+
+.ma5-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.ma5-tag.confirmed {
+  color: #389e0d;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
+.ma5-tag.below {
+  color: #999;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+}
+
+.momentum-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: #cf1322;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
 }
 
 .stock-score {
@@ -168,5 +279,13 @@ onMounted(loadData)
 
 .no-action .stock-score {
   color: #999;
+}
+
+.actionable-score {
+  color: #1890ff;
+}
+
+.momentum-score {
+  color: #cf1322;
 }
 </style>

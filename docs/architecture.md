@@ -1,6 +1,6 @@
 # TraderAnalysis Frontend — 技术方案
 
-> 更新日期：2026-05-07
+> 更新日期：2026-05-11
 
 ---
 
@@ -14,15 +14,14 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 
 | 场景 | 描述 |
 |------|------|
-| 登录认证 | JWT 登录，角色区分（admin/member），保护功能页面 |
 | 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议 |
-| 交易机会速览 | 一眼看清所有标的评分分布，哪些触发买入信号 |
-| 查看 K 线图 | 选择标的和周期，查看蜡烛图及叠加的技术指标 |
+| 交易机会速览 | 一眼看清所有标的评分分布，可执行机会（止跌确认）+ 主升浪龙头 |
 | 个股技术分析 | 查看某标的最新技术指标数值和评分（6 维度连续映射） |
 | 基本面分析 | 全标的基本面评分速览（5 因子），单只详情弹窗 |
-| 标的池管理 | 增删改查标的，筛选/搜索，刷新快照（admin） |
-| 条件选股 | 按市值/PE/价格/行业筛选，一键加入标的池 |
-| 修改密码 | 设置页查看用户信息、修改密码 |
+| 信号回测 | 3 种策略模式历史回测验证（买入并持有/技术指标买卖/跟随止盈） |
+| 查看 K 线图 | 选择标的和周期，查看蜡烛图及叠加的技术指标 |
+| 网格交易 | 网格策略运行状态监控、参数查看、交易记录 |
+| 标的池管理 | 增删改查标的，筛选/搜索，推荐策略，刷新快照 |
 
 ---
 
@@ -65,58 +64,33 @@ TraderAnalysisFrontend/
 │
 └── src/                          # 源代码
     ├── main.js                   # 应用入口
-    ├── App.vue                   # 根组件（顶部导航 + 健康检查 + 登出）
-    ├── router/index.js           # 路由配置 + 全局前置守卫
-    ├── api/trader.js             # API 调用层（含认证拦截器）
+    ├── App.vue                   # 根组件（顶部导航 + 下拉菜单 + 健康检查）
+    ├── router/index.js           # 路由配置
+    ├── api/trader.js             # API 调用层
     ├── components/               # 可复用组件
     │   ├── IndicatorChart.vue    # ECharts 图表组件
     │   └── KLineChart.vue        # 旧图表组件（未使用）
     └── views/                    # 页面
-        ├── Home.vue              # 首页（品牌 slogan + 登录入口）
-        ├── Login.vue             # 登录页
+        ├── Home.vue              # 首页（价值投资理念）
         ├── MarketTemperature.vue # 市场温度仪表盘
-        ├── ScoresOverview.vue    # 交易机会速览
-        ├── Chart.vue             # K 线图查询页
+        ├── ScoresOverview.vue    # 机会速览（价值）+ 可执行机会 + 主升浪
         ├── Dashboard.vue         # 个股技术分析
-        ├── Fundamental.vue       # 基本面分析
-        ├── WatchlistManage.vue   # 标的池管理（admin）
-        ├── StockFilter.vue       # 条件选股
-        └── Settings.vue          # 设置（用户信息 + 修改密码）
+        ├── Fundamental.vue       # 个股基本面分析
+        ├── Backtest.vue          # 信号回测（3 策略模式）
+        ├── Chart.vue             # 个股历史K线
+        ├── GridTrading.vue       # 网格交易监控
+        ├── WatchlistManage.vue   # 标的池管理
+        ├── Login.vue             # 登录页（暂时禁用）
+        ├── StockFilter.vue       # 条件选股（暂时隐藏）
+        └── Settings.vue          # 设置（暂时隐藏）
 ```
 
 ---
 
 ## 4. 认证系统
 
-### 4.1 认证流程
-
-```
-1. 用户访问功能页 → 路由守卫检查 localStorage 中是否有 token
-2. 无 token → 重定向到 /login
-3. 登录成功 → 后端返回 {access_token, role} → 存入 localStorage
-4. 后续请求 → Axios 请求拦截器自动附加 Authorization: Bearer <token>
-5. 收到 401 → 响应拦截器清除 token+role → 跳转 /login
-```
-
-### 4.2 公开页面
-
-| 路由 | 说明 |
-|------|------|
-| `/` | 首页（所有人可看，提供登录按钮） |
-| `/login` | 登录页 |
-
-### 4.3 权限控制
-
-- `role = admin`：可见「标的管理」导航入口
-- `role = member`：只读访问（未来扩展）
-- 导航栏根据登录状态显示「登录」或「登出」
-
-### 4.4 Token 管理
-
-| localStorage key | 内容 | 写入时机 |
-|-----------------|------|---------|
-| `token` | JWT access_token | 登录成功 |
-| `role` | `admin` / `member` | 登录成功 |
+> **v2.8+ 状态：认证暂时禁用。** 所有页面公开访问，无路由守卫，无 token 管理。
+> Login.vue 和相关拦截器代码保留在代码库中，待后端恢复认证后可重新启用。
 
 ---
 
@@ -124,18 +98,17 @@ TraderAnalysisFrontend/
 
 ### 5.1 路由表
 
-| 路径 | 组件 | 认证 | 说明 |
-|------|------|------|------|
-| `/` | Home.vue | 公开 | 首页，品牌 slogan + 登录/入口按钮 |
-| `/login` | Login.vue | 公开 | 登录页 |
-| `/market-temperature` | MarketTemperature.vue | 需登录 | 市场温度仪表盘 |
-| `/scores-overview` | ScoresOverview.vue | 需登录 | 全标的评分速览 |
-| `/chart` | Chart.vue | 需登录 | K 线图查询页 |
-| `/dashboard` | Dashboard.vue | 需登录 | 个股技术分析 |
-| `/fundamental` | Fundamental.vue | 需登录 | 基本面分析速览+详情 |
-| `/stock-filter` | StockFilter.vue | 需登录 | 条件选股 |
-| `/watchlist-manage` | WatchlistManage.vue | 需登录 | 标的池管理（admin 可见） |
-| `/settings` | Settings.vue | 需登录 | 用户信息 + 修改密码 |
+| 路径 | 组件 | 说明 |
+|------|------|------|
+| `/` | Home.vue | 首页，价值投资理念 |
+| `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘 |
+| `/scores-overview` | ScoresOverview.vue | 机会速览（价值）+ 可执行机会 + 主升浪 |
+| `/dashboard` | Dashboard.vue | 个股技术分析 |
+| `/fundamental` | Fundamental.vue | 个股基本面分析 |
+| `/backtest` | Backtest.vue | 信号回测（3 种策略模式） |
+| `/chart` | Chart.vue | 个股历史K线 |
+| `/grid-trading` | GridTrading.vue | 网格交易监控 |
+| `/watchlist-manage` | WatchlistManage.vue | 标的池管理 |
 
 所有路由使用懒加载（`() => import(...)`）。
 
@@ -146,7 +119,7 @@ TraderAnalysisFrontend/
 - 浅色主题（白色背景 + 蓝色高亮）
 - 内容区域最大宽度 1400px 居中
 - 后端状态指示灯（绿/红点）
-- 登录页不显示顶部导航
+- "个股分析"为下拉菜单（包含技术分析/基本面/历史K线）
 
 ---
 
@@ -175,11 +148,18 @@ TraderAnalysisFrontend/
 4. **标的卡片（2 列）** — SPY + QQQ：价格、日RSI、周RSI、MA200偏离度
 5. **历史趋势图** — ECharts 折线图，综合评分 + 建议仓位双 Y 轴
 
-### 6.4 ScoresOverview.vue — 交易机会速览
+### 6.4 ScoresOverview.vue — 机会速览（价值）
 
 **API 调用：** `GET /api/scores/overview`
 
-三组分区展示（强烈买入/建议买入/观望），支持日期切换，点击跳转 Dashboard 详情。
+**页面结构（v2.9+）：**
+1. **可执行机会区** — 评分达标(≥60) + 站上MA5确认止跌，蓝色高亮
+2. **主升浪龙头区** — 动量评分≥70，红色高亮，显示动量分数
+3. **强烈买入(≥80)** — 带MA5状态标签
+4. **建议买入(60~79)** — 带MA5状态标签
+5. **观望(<60)** — 高动量标的显示动量徽章
+
+支持日期切换，点击跳转 Dashboard 详情。
 
 ### 6.5 Chart.vue — K 线图查询页
 
@@ -206,23 +186,35 @@ TraderAnalysisFrontend/
 
 **5 因子（满分 100）：** 估值折价(30) / PE合理性(20) / 成长性(20) / 财务健康(15) / 分析师共识(15)
 
-### 6.8 WatchlistManage.vue — 标的池管理（admin）
+### 6.8 Backtest.vue — 信号回测
+
+**API 调用：** `GET /api/backtest/run` + `GET /api/watchlist`
+
+**策略模式（3 种）：**
+- **止跌买入，持有至跌破卖出（推荐）** — trailing_stop 模式，跟随均线(MA5/10/20/60)止盈，可选站上MA5入场确认
+- **买入并持有** — hold 模式，固定持仓天数(1-250天)
+- **技术指标买入卖出** — signal_exit 模式，退出阈值+最大持仓天数
+
+**页面结构：** 参数表单 → 统计概览(胜率/收益率/利润因子等) → 交易明细表
+
+### 6.9 GridTrading.vue — 网格交易
+
+**API 调用：** `GET /api/grid/status` + `GET /api/grid/orders`
+
+**页面结构：**
+1. 状态概览（标的、运行状态、环境、最新价）
+2. 网格参数（价格上下限、网格数量、间距、每格数量、最大持仓）
+3. 实时状态（当前持仓、成本、当日盈亏、交易次数）
+4. 网格线可视化
+5. 交易记录表
+
+### 6.10 WatchlistManage.vue — 标的池管理
 
 **API 调用：** `GET/POST/PATCH/DELETE /api/watchlist` + `POST /api/watchlist/refresh-snapshot`
 
-表格展示全部标的，支持分类/状态/市场筛选和搜索。新增/编辑弹窗，删除确认，刷新快照。
+表格展示全部标的，支持分类/市场筛选和搜索。显示推荐策略(hold_10d/hold_20d/swing/trend_ma5/ma10/ma20)。新增/编辑弹窗含策略选择，删除确认，刷新快照。
 
-### 6.9 StockFilter.vue — 条件选股
-
-**API 调用：** `GET /api/stock-filter/search` + `GET /api/stock-filter/info` + `POST /api/watchlist`
-
-筛选条件表单，结果表格，详情弹窗，一键加入标的池。需 OpenD 在线。
-
-### 6.10 Settings.vue — 设置页
-
-**API 调用：** `GET /api/auth/me` + `POST /api/auth/change-password`
-
-用户信息展示 + 修改密码表单。
+> 条件选股(StockFilter.vue)和设置(Settings.vue)暂时隐藏，代码保留。
 
 ---
 
@@ -234,20 +226,17 @@ TraderAnalysisFrontend/
 
 **Axios 实例配置：**
 - baseURL：从环境变量 `VITE_API_BASE_URL` 读取，默认 `http://localhost:8000`
-- 超时：10 秒
-- 请求拦截器：自动附加 `Authorization: Bearer <token>`
-- 响应拦截器：401 清除 token/role → 跳转 /login
+- 超时：10 秒（回测接口 30 秒）
+- 无认证拦截器（认证暂时禁用）
 
-**导出函数（20 个）：**
+**导出函数：**
 
 | 函数 | 请求 | 页面 |
 |------|------|------|
 | `getHealth()` | `GET /health` | App.vue |
-| `getAuthMe()` | `GET /api/auth/me` | Settings |
-| `changePassword(old, new)` | `POST /api/auth/change-password` | Settings |
 | `getWatchlist(params?)` | `GET /api/watchlist` | 多处 |
 | `getWatchlistDetail(code)` | `GET /api/watchlist/{code}` | — |
-| `addWatchlistStock(payload)` | `POST /api/watchlist` | WatchlistManage / StockFilter |
+| `addWatchlistStock(payload)` | `POST /api/watchlist` | WatchlistManage |
 | `updateWatchlistStock(code, payload)` | `PATCH /api/watchlist/{code}` | WatchlistManage |
 | `deleteWatchlistStock(code)` | `DELETE /api/watchlist/{code}` | WatchlistManage |
 | `batchAddWatchlist(payload)` | `POST /api/watchlist/batch` | WatchlistManage |
@@ -262,6 +251,9 @@ TraderAnalysisFrontend/
 | `getScoresOverview(date?)` | `GET /api/scores/overview` | ScoresOverview |
 | `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature |
 | `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature |
+| `getBacktestRun(params)` | `GET /api/backtest/run` | Backtest |
+| `getGridStatus(configId)` | `GET /api/grid/status` | GridTrading |
+| `getGridOrders(configId, limit)` | `GET /api/grid/orders` | GridTrading |
 
 ---
 

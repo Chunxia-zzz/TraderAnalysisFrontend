@@ -5,16 +5,21 @@
         <router-link to="/" class="logo">JerryYang的投资世界</router-link>
         <nav class="nav-links" style="margin-left: auto">
           <router-link to="/market-temperature" class="nav-item">市场温度</router-link>
-          <router-link to="/scores-overview" class="nav-item">机会速览</router-link>
-          <router-link to="/chart" class="nav-item">K线图</router-link>
-          <router-link to="/dashboard" class="nav-item">个股分析</router-link>
-          <router-link to="/fundamental" class="nav-item">基本面</router-link>
-          <router-link to="/stock-filter" class="nav-item">条件选股</router-link>
-          <router-link v-if="isAdmin" to="/watchlist-manage" class="nav-item">标的管理</router-link>
-          <router-link to="/settings" class="nav-item">设置</router-link>
+          <router-link to="/scores-overview" class="nav-item">机会速览（价值）</router-link>
+          <a-dropdown>
+            <span class="nav-item nav-dropdown" :class="{ active: isStockRoute }">个股分析 ▾</span>
+            <template #overlay>
+              <a-menu @click="handleMenuClick">
+                <a-menu-item key="/dashboard">个股技术分析</a-menu-item>
+                <a-menu-item key="/fundamental">个股基本面分析（yahoo）</a-menu-item>
+                <a-menu-item key="/chart">个股历史K线</a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
+          <router-link to="/backtest" class="nav-item">信号回测</router-link>
+          <router-link to="/grid-trading" class="nav-item">网格交易</router-link>
+          <router-link to="/watchlist-manage" class="nav-item">标的管理</router-link>
           <span class="health-dot" :class="healthOk ? 'online' : 'offline'" :title="healthOk ? '后端在线' : '后端离线'" />
-          <a v-if="isLoggedIn" class="nav-item logout-btn" @click="handleLogout">登出</a>
-          <router-link v-else to="/login" class="nav-item">登录</router-link>
         </nav>
       </div>
     </a-layout-header>
@@ -26,28 +31,20 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getHealth } from './api/trader'
 
 const router = useRouter()
 const route = useRoute()
-const isLoggedIn = ref(!!localStorage.getItem('token'))
-const isAdmin = ref(localStorage.getItem('role') === 'admin')
 const healthOk = ref(false)
-const showHeader = computed(() => route.name !== 'login')
+const showHeader = ref(true)
 
-watch(() => route.path, () => {
-  isLoggedIn.value = !!localStorage.getItem('token')
-  isAdmin.value = localStorage.getItem('role') === 'admin'
-})
+const stockRoutes = ['/dashboard', '/chart', '/fundamental']
+const isStockRoute = computed(() => stockRoutes.includes(route.path))
 
-function handleLogout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('role')
-  isLoggedIn.value = false
-  isAdmin.value = false
-  router.replace('/login')
+function handleMenuClick({ key }) {
+  router.push(key)
 }
 
 async function checkHealth() {
@@ -120,16 +117,9 @@ body {
 }
 
 .nav-item:hover,
-.nav-item.router-link-active {
+.nav-item.router-link-active,
+.nav-dropdown.active {
   color: #1890ff;
-}
-
-.logout-btn {
-  color: #999;
-}
-
-.logout-btn:hover {
-  color: #ff4d4f;
 }
 
 .health-dot {
