@@ -1,6 +1,6 @@
 # TraderAnalysis Frontend — 技术方案
 
-> 更新日期：2026-05-11
+> 更新日期：2026-05-12
 
 ---
 
@@ -75,10 +75,10 @@ TraderAnalysisFrontend/
         ├── MarketTemperature.vue # 市场温度仪表盘
         ├── ScoresOverview.vue    # 机会速览（价值）+ 可执行机会 + 主升浪
         ├── Dashboard.vue         # 个股技术分析
-        ├── Fundamental.vue       # 个股基本面分析
+        ├── Fundamental.vue       # 个股基本面分析（暂时隐藏）
         ├── Backtest.vue          # 信号回测（3 策略模式）
         ├── Chart.vue             # 个股历史K线
-        ├── GridTrading.vue       # 网格交易监控
+        ├── GridTrading.vue       # 网格交易监控（暂时隐藏）
         ├── WatchlistManage.vue   # 标的池管理
         ├── Login.vue             # 登录页（暂时禁用）
         ├── StockFilter.vue       # 条件选股（暂时隐藏）
@@ -150,14 +150,16 @@ TraderAnalysisFrontend/
 
 ### 6.4 ScoresOverview.vue — 机会速览（价值）
 
-**API 调用：** `GET /api/scores/overview`
+**API 调用：** `GET /api/scores/overview` + `GET /api/tp-sl`（按需）
 
 **页面结构（v2.9+）：**
 1. **可执行机会区** — 评分达标(≥60) + 站上MA5确认止跌，蓝色高亮
 2. **主升浪龙头区** — 动量评分≥70，红色高亮，显示动量分数
-3. **强烈买入(≥80)** — 带MA5状态标签
-4. **建议买入(60~79)** — 带MA5状态标签
+3. **强烈买入(≥80)** — 带MA5状态标签 + 止盈损展开按钮
+4. **建议买入(60~79)** — 带MA5状态标签 + 止盈损展开按钮
 5. **观望(<60)** — 高动量标的显示动量徽章
+
+**止盈止损交互：** BUY/STRONG_BUY 标的右侧有「止盈损」按钮，点击展开显示止损价(含距离%)、止盈价、R:R比。按需单只请求，不批量加载。
 
 支持日期切换，点击跳转 Dashboard 详情。
 
@@ -165,7 +167,9 @@ TraderAnalysisFrontend/
 
 **API 调用：** `GET /api/indicators` + `GET /api/watchlist`
 
-标的选择器 + 蜡烛图 + MA/布林带/成交量/MACD/RSI 多窗格联动，指标可切换显隐。
+标的选择器 + 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动，指标可切换显隐。
+
+**EMA多空带：** 显示 ema5~ema30 共6条均线，ema5>ema30区域填充浅红(多头)，ema5<ema30区域填充浅绿(空头)。
 
 ### 6.6 Dashboard.vue — 个股技术分析
 
@@ -173,7 +177,7 @@ TraderAnalysisFrontend/
 
 6 维度连续评分（进度条），技术指标数值面板，支持日期选择查看历史。
 
-### 6.7 Fundamental.vue — 基本面分析
+### 6.7 Fundamental.vue — 基本面分析（暂时隐藏，路由已注释）
 
 **API 调用：**
 - `GET /api/fundamental/overview` — 全标的基本面速览
@@ -191,13 +195,17 @@ TraderAnalysisFrontend/
 **API 调用：** `GET /api/backtest/run` + `GET /api/watchlist`
 
 **策略模式（3 种）：**
-- **止跌买入，持有至跌破卖出（推荐）** — trailing_stop 模式，跟随均线(MA5/10/20/60)止盈，可选站上MA5入场确认
+- **趋势跟踪（推荐）** — trend 模式，跟随均线(MA5/10/20)止盈，可选站上MA5入场确认
 - **买入并持有** — hold 模式，固定持仓天数(1-250天)
-- **技术指标买入卖出** — signal_exit 模式，退出阈值+最大持仓天数
+- **波段操作** — swing 模式，评分下降退出+最大持仓天数
 
-**页面结构：** 参数表单 → 统计概览(胜率/收益率/利润因子等) → 交易明细表
+**交易明细表列：** 信号日期 / 入场价 / 退出日期 / 退出价 / 收益率 / 持仓天数 / 退出原因 / 信号
 
-### 6.9 GridTrading.vue — 网格交易
+**退出原因标签：** 持有到期 / 评分下降 / 达最大天数 / 跌破MA5 / 跌破MA10 / 跌破MA20
+
+未完成交易(status=incomplete)自动过滤不展示。
+
+### 6.9 GridTrading.vue — 网格交易（暂时隐藏，路由已注释）
 
 **API 调用：** `GET /api/grid/status` + `GET /api/grid/orders`
 
@@ -251,6 +259,7 @@ TraderAnalysisFrontend/
 | `getScoresOverview(date?)` | `GET /api/scores/overview` | ScoresOverview |
 | `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature |
 | `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature |
+| `getTpSl(code, params?)` | `GET /api/tp-sl` | ScoresOverview |
 | `getBacktestRun(params)` | `GET /api/backtest/run` | Backtest |
 | `getGridStatus(configId)` | `GET /api/grid/status` | GridTrading |
 | `getGridOrders(configId, limit)` | `GET /api/grid/orders` | GridTrading |
@@ -265,7 +274,9 @@ TraderAnalysisFrontend/
 
 **Props：** `data`(Array) / `height`(Number, 默认800) / `visible`(Object, 各指标显隐)
 
-**图表结构：** 主图(K线+MA+布林) → 成交量 → MACD → RSI → DataZoom（四窗格联动）
+**图表结构：** 主图(K线+MA+布林+EMA多空带) → 成交量 → MACD → RSI → DataZoom（四窗格联动）
+
+**EMA多空带渲染：** 6条EMA线(ema5/10/15/20/25/30)独立着色 + ema5 vs ema30 方向判断填充区域颜色。
 
 ---
 

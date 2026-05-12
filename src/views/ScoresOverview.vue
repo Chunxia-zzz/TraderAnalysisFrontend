@@ -76,16 +76,30 @@
           style="margin-bottom: 16px; border-left: 3px solid #52c41a"
         >
           <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.strong_buy" :key="item.code" :xs="12" :md="6">
-              <div class="stock-card strong-buy" @click="goDetail(item)">
-                <div class="stock-left">
-                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                  <div class="stock-meta">
-                    <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
-                    <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+            <a-col v-for="item in overview.strong_buy" :key="item.code" :xs="24" :md="12">
+              <div class="stock-card-wrapper">
+                <div class="stock-card strong-buy" @click="goDetail(item)">
+                  <div class="stock-left">
+                    <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                    <div class="stock-meta">
+                      <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
+                      <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+                    </div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
+                    <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
                   </div>
                 </div>
-                <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
+                <div v-if="expandedCode === item.code" class="tpsl-detail">
+                  <a-spin v-if="tpslLoading && !tpslData[item.code]" size="small" />
+                  <template v-else-if="tpslData[item.code] && !tpslData[item.code].error">
+                    <span class="tpsl-item">止损 <b class="loss">{{ tpslData[item.code].stop_loss.price.toFixed(2) }}</b> ({{ (tpslData[item.code].stop_loss.distance_pct * 100).toFixed(1) }}%)</span>
+                    <span class="tpsl-item">止盈 <b class="profit">{{ tpslData[item.code].take_profit.price.toFixed(2) }}</b></span>
+                    <span class="tpsl-item">R:R <b>{{ tpslData[item.code].risk_reward_ratio.toFixed(1) }}</b></span>
+                  </template>
+                  <span v-else-if="tpslData[item.code]?.error" style="color: #999; font-size: 12px">{{ tpslData[item.code].error }}</span>
+                </div>
               </div>
             </a-col>
           </a-row>
@@ -99,16 +113,30 @@
           style="margin-bottom: 16px; border-left: 3px solid #faad14"
         >
           <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.buy" :key="item.code" :xs="12" :md="6">
-              <div class="stock-card buy" @click="goDetail(item)">
-                <div class="stock-left">
-                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                  <div class="stock-meta">
-                    <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
-                    <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+            <a-col v-for="item in overview.buy" :key="item.code" :xs="24" :md="12">
+              <div class="stock-card-wrapper">
+                <div class="stock-card buy" @click="goDetail(item)">
+                  <div class="stock-left">
+                    <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
+                    <div class="stock-meta">
+                      <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
+                      <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+                    </div>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px">
+                    <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
+                    <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
                   </div>
                 </div>
-                <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
+                <div v-if="expandedCode === item.code" class="tpsl-detail">
+                  <a-spin v-if="tpslLoading && !tpslData[item.code]" size="small" />
+                  <template v-else-if="tpslData[item.code] && !tpslData[item.code].error">
+                    <span class="tpsl-item">止损 <b class="loss">{{ tpslData[item.code].stop_loss.price.toFixed(2) }}</b> ({{ (tpslData[item.code].stop_loss.distance_pct * 100).toFixed(1) }}%)</span>
+                    <span class="tpsl-item">止盈 <b class="profit">{{ tpslData[item.code].take_profit.price.toFixed(2) }}</b></span>
+                    <span class="tpsl-item">R:R <b>{{ tpslData[item.code].risk_reward_ratio.toFixed(1) }}</b></span>
+                  </template>
+                  <span v-else-if="tpslData[item.code]?.error" style="color: #999; font-size: 12px">{{ tpslData[item.code].error }}</span>
+                </div>
               </div>
             </a-col>
           </a-row>
@@ -142,15 +170,44 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getScoresOverview } from '../api/trader'
+import { getScoresOverview, getTpSl } from '../api/trader'
 
 const router = useRouter()
 const selectedDate = ref(null)
 const loading = ref(true)
 const overview = ref(null)
 const emptyMessage = ref('暂无评分数据')
+
+// 止盈止损展开
+const expandedCode = ref(null)
+const tpslLoading = ref(false)
+const tpslData = reactive({})
+
+async function toggleTpSl(item, event) {
+  event.stopPropagation()
+  const code = item.code
+  if (expandedCode.value === code) {
+    expandedCode.value = null
+    return
+  }
+  expandedCode.value = code
+  if (tpslData[code]) return
+  tpslLoading.value = true
+  try {
+    const { data } = await getTpSl(code)
+    if (data && data.data !== null) {
+      tpslData[code] = data
+    } else {
+      tpslData[code] = { error: data?.message || '暂无数据' }
+    }
+  } catch {
+    tpslData[code] = { error: '请求失败' }
+  } finally {
+    tpslLoading.value = false
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -287,5 +344,43 @@ onMounted(loadData)
 
 .momentum-score {
   color: #cf1322;
+}
+
+.stock-card-wrapper {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tpsl-btn {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: #1890ff;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tpsl-btn:hover {
+  background: #bae7ff;
+}
+
+.tpsl-detail {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 14px;
+  background: #fafafa;
+  border-top: 1px dashed #e8e8e8;
+  font-size: 12px;
+}
+
+.tpsl-item b.loss {
+  color: #cf1322;
+}
+
+.tpsl-item b.profit {
+  color: #389e0d;
 }
 </style>

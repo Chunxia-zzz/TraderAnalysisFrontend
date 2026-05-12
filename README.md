@@ -1,6 +1,6 @@
 # TraderAnalysis Frontend
 
-股票分析前端，基于 Vue 3，对接后端 FastAPI 服务。提供市场温度、交易机会速览、个股技术分析、基本面分析、信号回测、网格交易、标的管理等功能。
+股票分析前端，基于 Vue 3，对接后端 FastAPI 服务。提供市场温度、交易机会速览、个股技术分析、信号回测、止盈止损、标的管理等功能。
 
 ## 快速启动
 
@@ -35,20 +35,19 @@ npm run preview  # 本地预览生产构建
 |------|------|------|
 | 首页 | `/` | 价值投资理念展示 |
 | 市场温度 | `/market-temperature` | 3 维度综合评分，8 级状态映射，仓位建议，SPY/QQQ 指标，历史趋势图 |
-| 机会速览（价值） | `/scores-overview` | 全标的评分分布（强买/买入/观望）+ 可执行机会 + 主升浪龙头 |
+| 机会速览（价值） | `/scores-overview` | 全标的评分分布（强买/买入/观望）+ 可执行机会 + 主升浪龙头 + 止盈止损 |
 | 个股技术分析 | `/dashboard` | 6 维度连续评分，技术指标数值面板 |
-| 个股基本面分析 | `/fundamental` | 5 因子基本面评分速览（低估/合理/高估），单只详情弹窗 |
-| 信号回测 | `/backtest` | 3 种策略模式回测（买入并持有/技术指标买卖/跟随止盈），统计+交易明细 |
-| 个股历史K线 | `/chart` | 蜡烛图 + MA/布林带/成交量/MACD/RSI 多窗格联动 |
-| 网格交易 | `/grid-trading` | 网格状态监控、参数展示、网格线可视化、交易记录 |
+| 信号回测 | `/backtest` | 3 种策略模式回测（趋势跟踪/买入并持有/波段操作），统计+交易明细 |
+| 个股历史K线 | `/chart` | 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动 |
 | 标的管理 | `/watchlist-manage` | 标的池增删改查 + 筛选 + 推荐策略 + 刷新快照 |
+| ~~个股基本面分析~~ | `/fundamental` | *暂时隐藏* |
+| ~~网格交易~~ | `/grid-trading` | *暂时隐藏* |
 
 ## 导航结构
 
 ```
-市场温度 | 机会速览（价值） | 个股分析 ▾ | 信号回测 | 网格交易 | 标的管理
+市场温度 | 机会速览（价值） | 个股分析 ▾ | 信号回测 | 标的管理
                               ├─ 个股技术分析
-                              ├─ 个股基本面分析（yahoo）
                               └─ 个股历史K线
 ```
 
@@ -77,11 +76,8 @@ npm run preview  # 本地预览生产构建
 | `GET /api/scores/latest` | 个股评分 | Dashboard |
 | `GET /api/indicators` | K 线+指标 | Chart |
 | `GET /api/indicators/latest` | 最新指标 | Dashboard |
-| `GET /api/fundamental/overview` | 基本面速览 | Fundamental |
-| `GET /api/fundamental/latest` | 基本面详情 | Fundamental |
 | `GET /api/backtest/run` | 信号回测 | Backtest |
-| `GET /api/grid/status` | 网格状态 | GridTrading |
-| `GET /api/grid/orders` | 网格交易记录 | GridTrading |
+| `GET /api/tp-sl` | 止盈止损 | ScoresOverview |
 | `GET /api/watchlist` | 标的池 | 多处 |
 | `POST/PATCH/DELETE /api/watchlist` | 标的管理 | WatchlistManage |
 | `GET /health` | 健康检查 | App.vue |
@@ -100,9 +96,9 @@ src/
 │   ├── ScoresOverview.vue     # 机会速览（价值）
 │   ├── Chart.vue              # K 线图查询页
 │   ├── Dashboard.vue          # 个股技术分析
-│   ├── Fundamental.vue        # 基本面分析
+│   ├── Fundamental.vue        # 基本面分析（暂时隐藏）
 │   ├── Backtest.vue           # 信号回测
-│   ├── GridTrading.vue        # 网格交易
+│   ├── GridTrading.vue        # 网格交易（暂时隐藏）
 │   ├── WatchlistManage.vue    # 标的池管理
 │   ├── Login.vue              # 登录页（暂时禁用）
 │   ├── StockFilter.vue        # 条件选股（暂时隐藏）

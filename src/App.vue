@@ -11,13 +11,11 @@
             <template #overlay>
               <a-menu @click="handleMenuClick">
                 <a-menu-item key="/dashboard">个股技术分析</a-menu-item>
-                <a-menu-item key="/fundamental">个股基本面分析（yahoo）</a-menu-item>
                 <a-menu-item key="/chart">个股历史K线</a-menu-item>
               </a-menu>
             </template>
           </a-dropdown>
           <router-link to="/backtest" class="nav-item">信号回测</router-link>
-          <router-link to="/grid-trading" class="nav-item">网格交易</router-link>
           <router-link to="/watchlist-manage" class="nav-item">标的管理</router-link>
           <span class="health-dot" :class="healthOk ? 'online' : 'offline'" :title="healthOk ? '后端在线' : '后端离线'" />
         </nav>
@@ -40,7 +38,7 @@ const route = useRoute()
 const healthOk = ref(false)
 const showHeader = ref(true)
 
-const stockRoutes = ['/dashboard', '/chart', '/fundamental']
+const stockRoutes = ['/dashboard', '/chart']
 const isStockRoute = computed(() => stockRoutes.includes(route.path))
 
 function handleMenuClick({ key }) {

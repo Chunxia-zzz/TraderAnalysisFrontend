@@ -26,11 +26,11 @@ const routes = [
     name: 'dashboard',
     component: () => import('../views/Dashboard.vue'),
   },
-  {
-    path: '/fundamental',
-    name: 'fundamental',
-    component: () => import('../views/Fundamental.vue'),
-  },
+  // {
+  //   path: '/fundamental',
+  //   name: 'fundamental',
+  //   component: () => import('../views/Fundamental.vue'),
+  // },
   {
     path: '/watchlist-manage',
     name: 'watchlist-manage',
@@ -46,11 +46,11 @@ const routes = [
     name: 'backtest',
     component: () => import('../views/Backtest.vue'),
   },
-  {
-    path: '/grid-trading',
-    name: 'grid-trading',
-    component: () => import('../views/GridTrading.vue'),
-  },
+  // {
+  //   path: '/grid-trading',
+  //   name: 'grid-trading',
+  //   component: () => import('../views/GridTrading.vue'),
+  // },
   {
     path: '/settings',
     name: 'settings',

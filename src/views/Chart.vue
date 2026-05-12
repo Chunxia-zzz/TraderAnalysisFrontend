@@ -52,6 +52,13 @@
         >
           BOLL
         </a-tag>
+        <a-tag
+          :color="visible.ema ? '#00897b' : ''"
+          class="indicator-tag"
+          @click="visible.ema = !visible.ema"
+        >
+          EMA多空带
+        </a-tag>
 
         <a-divider type="vertical" />
 
@@ -114,6 +121,7 @@ const visible = reactive({
   ma20: false,
   ma60: false,
   boll: true,
+  ema: false,
   vol: true,
   macd: true,
   rsi: true,

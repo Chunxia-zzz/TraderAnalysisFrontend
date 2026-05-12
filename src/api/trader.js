@@ -50,6 +50,10 @@ export const getMarketTemperature = () =>
 export const getMarketTemperatureHistory = (days = 30) =>
   client.get('/api/market-temperature/history', { params: { days } })
 
+// ── 止盈止损 ──
+export const getTpSl = (code, params) =>
+  client.get('/api/tp-sl', { params: { code, ...params } })
+
 // ── 信号回测 ──
 export const getBacktestRun = (params) =>
   client.get('/api/backtest/run', { params, timeout: 30000 })

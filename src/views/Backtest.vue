@@ -14,9 +14,9 @@
         />
         <span style="color: #666">策略</span>
         <a-select v-model:value="mode" style="width: 280px">
-          <a-select-option value="trailing_stop">止跌买入，持有至跌破卖出（推荐）</a-select-option>
-          <a-select-option value="hold">买入并持有</a-select-option>
-          <a-select-option value="signal_exit">技术指标买入卖出</a-select-option>
+          <a-select-option value="trend">趋势跟踪：跌破均线卖出（推荐）</a-select-option>
+          <a-select-option value="hold">买入并持有固定天数</a-select-option>
+          <a-select-option value="swing">波段操作：评分下降卖出</a-select-option>
         </a-select>
         <span style="color: #666">买入阈值</span>
         <a-input-number v-model:value="threshold" :min="1" :max="100" style="width: 80px" />
@@ -24,19 +24,18 @@
           <span style="color: #666">持仓天数</span>
           <a-input-number v-model:value="holdingDays" :min="1" :max="250" style="width: 80px" />
         </template>
-        <template v-if="mode === 'signal_exit'">
+        <template v-if="mode === 'swing'">
           <span style="color: #666">退出阈值</span>
           <a-input-number v-model:value="exitThreshold" :min="1" :max="100" style="width: 80px" />
           <span style="color: #666">最大持仓天数</span>
           <a-input-number v-model:value="maxHoldingDays" :min="1" :max="365" style="width: 80px" />
         </template>
-        <template v-if="mode === 'trailing_stop'">
+        <template v-if="mode === 'trend'">
           <span style="color: #666">跟随均线</span>
           <a-select v-model:value="trailMa" style="width: 100px">
             <a-select-option value="ma5">MA5</a-select-option>
             <a-select-option value="ma10">MA10</a-select-option>
             <a-select-option value="ma20">MA20</a-select-option>
-            <a-select-option value="ma60">MA60</a-select-option>
           </a-select>
           <span style="color: #666">入场确认</span>
           <a-select v-model:value="trailEntryConfirm" style="width: 130px">
@@ -102,6 +101,11 @@
               {{ record.return_pct >= 0 ? '+' : '' }}{{ record.return_pct.toFixed(2) }}%
             </span>
           </template>
+          <template v-if="column.key === 'exit_reason'">
+            <a-tag v-if="record.exit_reason" :color="record.exit_reason === 'incomplete' ? 'default' : 'blue'">
+              {{ EXIT_REASON_LABELS[record.exit_reason] || record.exit_reason }}
+            </a-tag>
+          </template>
           <template v-if="column.key === 'signal'">
             <a-tag :color="signalColor(record.signal)">{{ signalLabel(record.signal) }}</a-tag>
           </template>
@@ -117,7 +121,7 @@ import { message } from 'ant-design-vue'
 import { getWatchlist, getBacktestRun } from '../api/trader'
 
 const code = ref(undefined)
-const mode = ref('hold')
+const mode = ref('trend')
 const threshold = ref(40)
 const holdingDays = ref(10)
 const exitThreshold = ref(30)
@@ -138,9 +142,20 @@ const columns = [
   { title: '退出日期', dataIndex: 'exit_date', key: 'exit_date', width: 110 },
   { title: '退出价', dataIndex: 'exit_price', key: 'exit_price', width: 90 },
   { title: '收益率', key: 'return_pct', width: 100 },
-  { title: '评分', dataIndex: 'total_score', key: 'total_score', width: 70 },
+  { title: '持仓天数', dataIndex: 'holding_days', key: 'holding_days', width: 80 },
+  { title: '退出原因', key: 'exit_reason', width: 100 },
   { title: '信号', key: 'signal', width: 90 },
 ]
+
+const EXIT_REASON_LABELS = {
+  hold: '持有到期',
+  score_drop: '评分下降',
+  max_holding: '达最大天数',
+  incomplete: '未完成',
+  below_ma5: '跌破MA5',
+  below_ma10: '跌破MA10',
+  below_ma20: '跌破MA20',
+}
 
 function signalColor(signal) {
   if (signal === 'STRONG_BUY') return 'green'
@@ -170,11 +185,12 @@ async function runBacktest() {
     }
     if (mode.value === 'hold') {
       params.holding_days = holdingDays.value
-    } else if (mode.value === 'signal_exit') {
+    } else if (mode.value === 'swing') {
       params.exit_threshold = exitThreshold.value
       params.max_holding_days = maxHoldingDays.value
-    } else if (mode.value === 'trailing_stop') {
+    } else if (mode.value === 'trend') {
       params.trail_ma = trailMa.value
+      params.max_holding_days = maxHoldingDays.value
       if (trailEntryConfirm.value !== 'none') {
         params.entry_confirm = trailEntryConfirm.value
       }
@@ -188,7 +204,9 @@ async function runBacktest() {
       errorMsg.value = data.message
     } else {
       summary.value = data.summary
-      trades.value = (data.trades || []).map((t, i) => ({ ...t, _key: i }))
+      trades.value = (data.trades || [])
+        .filter((t) => t.status !== 'incomplete')
+        .map((t, i) => ({ ...t, _key: i }))
     }
   } catch {
     message.error('回测请求失败')

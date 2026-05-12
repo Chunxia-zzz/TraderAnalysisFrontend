@@ -13,7 +13,7 @@ const props = defineProps({
     type: Object,
     default: () => ({
       ma5: true, ma10: true, ma20: false, ma60: false,
-      boll: true, vol: true, macd: true, rsi: true,
+      boll: true, ema: false, vol: true, macd: true, rsi: true,
     }),
   },
 })
@@ -26,6 +26,10 @@ const UP_COLOR = '#ef5350'
 const DOWN_COLOR = '#26a69a'
 const MA_COLORS = { ma5: '#ff9800', ma10: '#2196f3', ma20: '#e91e63', ma60: '#9c27b0' }
 const BOLL_COLOR = '#795548'
+const EMA_COLORS = {
+  ema5: '#e53935', ema10: '#ff7043', ema15: '#ffa726',
+  ema20: '#66bb6a', ema25: '#42a5f5', ema30: '#5c6bc0',
+}
 const DIF_COLOR = '#ff9800'
 const DEA_COLOR = '#2196f3'
 const RSI_COLOR = '#ff5722'
@@ -131,6 +135,45 @@ function buildOption(raw, vis) {
     series.push(makeLine('BOLL上轨', raw.map((d) => d.boll_upper), 0, 0, BOLL_COLOR, 'dashed'))
     series.push(makeLine('BOLL中轨', raw.map((d) => d.boll_mid), 0, 0, BOLL_COLOR, 'dotted'))
     series.push(makeLine('BOLL下轨', raw.map((d) => d.boll_lower), 0, 0, BOLL_COLOR, 'dashed'))
+  }
+
+  // EMA 多空飘带（实心色带）
+  const hasEma = vis.ema && raw.some((d) => d.ema5 != null && d.ema30 != null)
+  if (hasEma) {
+    series.push({
+      name: 'EMA多空带',
+      type: 'custom',
+      xAxisIndex: 0,
+      yAxisIndex: 0,
+      data: raw.map((d, i) => [i, d.ema5, d.ema30]),
+      renderItem(params, api) {
+        const idx = params.dataIndex
+        if (idx >= raw.length - 1) return null
+        const cur = raw[idx]
+        const nxt = raw[idx + 1]
+        if (cur.ema5 == null || cur.ema30 == null || nxt.ema5 == null || nxt.ema30 == null) return null
+
+        // 四个角的像素坐标
+        const p1 = api.coord([idx, cur.ema5])
+        const p2 = api.coord([idx + 1, nxt.ema5])
+        const p3 = api.coord([idx + 1, nxt.ema30])
+        const p4 = api.coord([idx, cur.ema30])
+
+        // 判断多空：用两端中点判断
+        const avgShort = (cur.ema5 + nxt.ema5) / 2
+        const avgLong = (cur.ema30 + nxt.ema30) / 2
+        const isBull = avgShort >= avgLong
+
+        return {
+          type: 'polygon',
+          shape: { points: [p1, p2, p3, p4] },
+          style: {
+            fill: isBull ? 'rgba(38,166,154,0.7)' : 'rgba(239,83,80,0.7)',
+          },
+          silent: true,
+        }
+      },
+    })
   }
 
   // 成交量
