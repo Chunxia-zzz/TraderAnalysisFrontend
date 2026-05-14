@@ -44,6 +44,10 @@ export const resetUserPassword = (username, new_password) =>
   client.post(`/api/users/${username}/reset-password`, { new_password })
 export const deleteUser = (username) => client.delete(`/api/users/${username}`)
 
+// ── 条件选股 ──
+export const stockFilterSearch = (params) => client.get('/api/stock-filter/search', { params })
+export const stockFilterInfo = (code) => client.get('/api/stock-filter/info', { params: { code } })
+
 // ── 标的池 ──
 export const getWatchlist = (params) => client.get('/api/watchlist', { params })
 export const getWatchlistDetail = (code) => client.get(`/api/watchlist/${code}`)
