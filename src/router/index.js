@@ -2,6 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
+    path: '/login',
+    name: 'login',
+    component: () => import('../views/Login.vue'),
+    meta: { public: true },
+  },
+  {
     path: '/',
     name: 'home',
     component: () => import('../views/Home.vue'),
@@ -26,11 +32,6 @@ const routes = [
     name: 'dashboard',
     component: () => import('../views/Dashboard.vue'),
   },
-  // {
-  //   path: '/fundamental',
-  //   name: 'fundamental',
-  //   component: () => import('../views/Fundamental.vue'),
-  // },
   {
     path: '/watchlist-manage',
     name: 'watchlist-manage',
@@ -46,11 +47,12 @@ const routes = [
     name: 'backtest',
     component: () => import('../views/Backtest.vue'),
   },
-  // {
-  //   path: '/grid-trading',
-  //   name: 'grid-trading',
-  //   component: () => import('../views/GridTrading.vue'),
-  // },
+  {
+    path: '/users',
+    name: 'users',
+    component: () => import('../views/UserManagement.vue'),
+    meta: { requireAdmin: true },
+  },
   {
     path: '/settings',
     name: 'settings',
@@ -61,6 +63,28 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('token')
+  const role = localStorage.getItem('role')
+
+  // 未登录 → 跳转登录页
+  if (!to.meta.public && !token) {
+    return next({ name: 'login', query: { redirect: to.fullPath } })
+  }
+
+  // 已登录访问登录页 → 跳转首页
+  if (to.name === 'login' && token) {
+    return next({ name: 'home' })
+  }
+
+  // 需要 admin 权限的页面
+  if (to.meta.requireAdmin && role !== 'admin') {
+    return next({ name: 'home' })
+  }
+
+  next()
 })
 
 export default router

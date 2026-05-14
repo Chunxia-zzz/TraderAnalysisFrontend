@@ -48,7 +48,9 @@ async function handleLogin() {
     if (data.access_token) {
       localStorage.setItem('token', data.access_token)
       localStorage.setItem('role', data.role)
-      router.replace('/')
+      localStorage.setItem('username', form.username)
+      const redirect = router.currentRoute.value.query.redirect || '/'
+      router.replace(redirect)
     } else {
       errorMsg.value = data.message || '用户名或密码错误'
     }

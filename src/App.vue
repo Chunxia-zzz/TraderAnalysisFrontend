@@ -17,7 +17,16 @@
           </a-dropdown>
           <router-link to="/backtest" class="nav-item">信号回测</router-link>
           <router-link to="/watchlist-manage" class="nav-item">标的管理</router-link>
+          <router-link v-if="isAdmin" to="/users" class="nav-item">用户管理</router-link>
           <span class="health-dot" :class="healthOk ? 'online' : 'offline'" :title="healthOk ? '后端在线' : '后端离线'" />
+          <a-dropdown>
+            <span class="nav-item nav-dropdown">{{ currentUser }} ▾</span>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item key="logout" @click="handleLogout">退出登录</a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
         </nav>
       </div>
     </a-layout-header>
@@ -36,13 +45,23 @@ import { getHealth } from './api/trader'
 const router = useRouter()
 const route = useRoute()
 const healthOk = ref(false)
-const showHeader = ref(true)
+
+const showHeader = computed(() => route.name !== 'login')
+const currentUser = computed(() => localStorage.getItem('username') || '我')
+const isAdmin = computed(() => localStorage.getItem('role') === 'admin')
 
 const stockRoutes = ['/dashboard', '/chart']
 const isStockRoute = computed(() => stockRoutes.includes(route.path))
 
 function handleMenuClick({ key }) {
   router.push(key)
+}
+
+function handleLogout() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('role')
+  localStorage.removeItem('username')
+  router.push({ name: 'login' })
 }
 
 async function checkHealth() {
