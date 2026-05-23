@@ -28,6 +28,11 @@ const routes = [
     component: () => import('../views/ScoresOverview.vue'),
   },
   {
+    path: '/momentum-leaders',
+    name: 'momentum-leaders',
+    component: () => import('../views/MomentumLeaders.vue'),
+  },
+  {
     path: '/dashboard',
     name: 'dashboard',
     component: () => import('../views/Dashboard.vue'),

@@ -16,7 +16,6 @@
           <a-tag color="green">强买 {{ overview.summary.strong_buy_count }}</a-tag>
           <a-tag color="lime">买入 {{ overview.summary.buy_count }}</a-tag>
           <a-tag color="orange">可执行 {{ overview.summary.actionable_count }}</a-tag>
-          <a-tag color="volcano">主升浪 {{ overview.summary.momentum_leaders_count }}</a-tag>
           <a-tag>观望 {{ overview.summary.no_action_count }}</a-tag>
         </template>
       </a-space>
@@ -41,28 +40,6 @@
                   </div>
                 </div>
                 <div class="stock-score actionable-score">{{ item.total_score.toFixed(1) }}</div>
-              </div>
-            </a-col>
-          </a-row>
-        </a-card>
-
-        <!-- 主升浪龙头 -->
-        <a-card
-          v-if="overview.momentum_leaders && overview.momentum_leaders.length > 0"
-          title="主升浪龙头（动量评分≥70）"
-          size="small"
-          style="margin-bottom: 16px; border-left: 3px solid #f5222d"
-        >
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.momentum_leaders" :key="item.code" :xs="12" :md="6">
-              <div class="stock-card momentum" @click="goDetail(item)">
-                <div class="stock-left">
-                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                  <div class="stock-meta">
-                    <span class="momentum-badge">动量 {{ item.momentum_score }}</span>
-                  </div>
-                </div>
-                <div class="stock-score momentum-score">{{ item.total_score.toFixed(1) }}</div>
               </div>
             </a-col>
           </a-row>
