@@ -137,9 +137,25 @@ function buildOption(raw, vis) {
     series.push(makeLine('BOLL下轨', raw.map((d) => d.boll_lower), 0, 0, BOLL_COLOR, 'dashed'))
   }
 
-  // EMA 多空飘带（实心色带）
+  // EMA 多空飘带（实心色带）+ 翻转标记
   const hasEma = vis.ema && raw.some((d) => d.ema5 != null && d.ema30 != null)
   if (hasEma) {
+    // 计算翻转点
+    const bullMarkPoints = []  // 空转多
+    const bearMarkPoints = []  // 多转空
+    for (let i = 1; i < raw.length; i++) {
+      const prev = raw[i - 1]
+      const cur = raw[i]
+      if (prev.ema5 == null || prev.ema30 == null || cur.ema5 == null || cur.ema30 == null) continue
+      const prevBull = prev.ema5 >= prev.ema30
+      const curBull = cur.ema5 >= cur.ema30
+      if (!prevBull && curBull) {
+        bullMarkPoints.push({ coord: [i, cur.low], value: '多' })
+      } else if (prevBull && !curBull) {
+        bearMarkPoints.push({ coord: [i, cur.high], value: '空' })
+      }
+    }
+
     series.push({
       name: 'EMA多空带',
       type: 'custom',
@@ -153,13 +169,11 @@ function buildOption(raw, vis) {
         const nxt = raw[idx + 1]
         if (cur.ema5 == null || cur.ema30 == null || nxt.ema5 == null || nxt.ema30 == null) return null
 
-        // 四个角的像素坐标
         const p1 = api.coord([idx, cur.ema5])
         const p2 = api.coord([idx + 1, nxt.ema5])
         const p3 = api.coord([idx + 1, nxt.ema30])
         const p4 = api.coord([idx, cur.ema30])
 
-        // 判断多空：用两端中点判断
         const avgShort = (cur.ema5 + nxt.ema5) / 2
         const avgLong = (cur.ema30 + nxt.ema30) / 2
         const isBull = avgShort >= avgLong
@@ -167,13 +181,64 @@ function buildOption(raw, vis) {
         return {
           type: 'polygon',
           shape: { points: [p1, p2, p3, p4] },
-          style: {
-            fill: isBull ? 'rgba(38,166,154,0.7)' : 'rgba(239,83,80,0.7)',
-          },
+          style: { fill: isBull ? 'rgba(38,166,154,0.7)' : 'rgba(239,83,80,0.7)' },
           silent: true,
         }
       },
     })
+
+    // 空转多标记（绿色向上箭头，打在当日最低价下方）
+    if (bullMarkPoints.length > 0) {
+      series.push({
+        name: '空转多',
+        type: 'scatter',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        data: bullMarkPoints.map((p) => ({ value: p.coord, label: p.value })),
+        symbol: 'triangle',
+        symbolSize: 12,
+        symbolOffset: [0, '60%'],
+        itemStyle: { color: '#26a69a' },
+        label: {
+          show: true,
+          formatter: '转多',
+          position: 'bottom',
+          fontSize: 10,
+          color: '#26a69a',
+          fontWeight: 'bold',
+        },
+        tooltip: {
+          formatter: (p) => `${dates[p.value[0]] ?? ''}<br/>飘带 空转多`,
+        },
+      })
+    }
+
+    // 多转空标记（红色向下箭头，打在当日最高价上方）
+    if (bearMarkPoints.length > 0) {
+      series.push({
+        name: '多转空',
+        type: 'scatter',
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        data: bearMarkPoints.map((p) => ({ value: p.coord, label: p.value })),
+        symbol: 'triangle',
+        symbolSize: 12,
+        symbolRotate: 180,
+        symbolOffset: [0, '-60%'],
+        itemStyle: { color: '#ef5350' },
+        label: {
+          show: true,
+          formatter: '转空',
+          position: 'top',
+          fontSize: 10,
+          color: '#ef5350',
+          fontWeight: 'bold',
+        },
+        tooltip: {
+          formatter: (p) => `${dates[p.value[0]] ?? ''}<br/>飘带 多转空`,
+        },
+      })
+    }
   }
 
   // 成交量

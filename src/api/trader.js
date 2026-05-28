@@ -5,48 +5,8 @@ const client = axios.create({
   timeout: 10000,
 })
 
-// ── 请求拦截：自动附加 Bearer token ──
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// ── 响应拦截：401 自动跳转登录 ──
-client.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('role')
-      window.location.href = '/login'
-    }
-    return Promise.reject(err)
-  }
-)
-
 // ── 健康检查 ──
 export const getHealth = () => client.get('/health')
-
-// ── 认证 ──
-export const login = (username, password) =>
-  client.post('/api/auth/login', { username, password })
-export const getMe = () => client.get('/api/auth/me')
-
-// ── 用户管理（admin） ──
-export const listUsers = () => client.get('/api/users')
-export const createUser = (payload) => client.post('/api/users', payload)
-export const setUserStatus = (username, is_active) =>
-  client.patch(`/api/users/${username}/status`, null, { params: { is_active } })
-export const resetUserPassword = (username, new_password) =>
-  client.post(`/api/users/${username}/reset-password`, { new_password })
-export const deleteUser = (username) => client.delete(`/api/users/${username}`)
-
-// ── 条件选股 ──
-export const stockFilterSearch = (params) => client.get('/api/stock-filter/search', { params })
-export const stockFilterInfo = (code) => client.get('/api/stock-filter/info', { params: { code } })
 
 // ── 标的池 ──
 export const getWatchlist = (params) => client.get('/api/watchlist', { params })

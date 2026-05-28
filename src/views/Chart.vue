@@ -97,10 +97,12 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { getIndicators, getWatchlist } from '../api/trader'
 import IndicatorChart from '../components/IndicatorChart.vue'
 
+const route = useRoute()
 const code = ref(undefined)
 const watchlistLoading = ref(false)
 const watchlistOptions = ref([])
@@ -116,12 +118,12 @@ const maKeys = ['ma5', 'ma10', 'ma20', 'ma60']
 const maTagColors = { ma5: '#ff9800', ma10: '#2196f3', ma20: '#e91e63', ma60: '#9c27b0' }
 
 const visible = reactive({
-  ma5: true,
-  ma10: true,
+  ma5: false,
+  ma10: false,
   ma20: false,
   ma60: false,
-  boll: true,
-  ema: false,
+  boll: false,
+  ema: true,
   vol: true,
   macd: true,
   rsi: true,
@@ -159,10 +161,12 @@ async function loadWatchlist() {
       label: `${item.ticker} - ${item.name}`,
       value: item.code,
     }))
-    if (watchlistOptions.value.length > 0 && !code.value) {
+    if (route.query.code) {
+      code.value = route.query.code
+    } else if (watchlistOptions.value.length > 0 && !code.value) {
       code.value = watchlistOptions.value[0].value
-      fetchData()
     }
+    fetchData()
   } catch {
     message.error('获取标的列表失败')
   } finally {

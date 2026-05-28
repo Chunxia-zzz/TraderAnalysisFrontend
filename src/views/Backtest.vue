@@ -13,13 +13,17 @@
           :options="watchlistOptions"
         />
         <span style="color: #666">策略</span>
-        <a-select v-model:value="mode" style="width: 280px">
+        <a-select v-model:value="mode" style="width: 300px">
           <a-select-option value="trend">趋势跟踪：跌破均线卖出（推荐）</a-select-option>
           <a-select-option value="hold">买入并持有固定天数</a-select-option>
           <a-select-option value="swing">波段操作：评分下降卖出</a-select-option>
+          <a-select-option value="ribbon_long">EMA飘带多头：空转多买入，多转空卖出</a-select-option>
+          <a-select-option value="ribbon_short">EMA飘带空头：多转空做空，空转多平空</a-select-option>
         </a-select>
+        <template v-if="!isRibbonMode">
         <span style="color: #666">买入阈值</span>
         <a-input-number v-model:value="threshold" :min="1" :max="100" style="width: 80px" />
+        </template>
         <template v-if="mode === 'hold'">
           <span style="color: #666">持仓天数</span>
           <a-input-number v-model:value="holdingDays" :min="1" :max="250" style="width: 80px" />
@@ -116,12 +120,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { getWatchlist, getBacktestRun } from '../api/trader'
 
 const code = ref(undefined)
 const mode = ref('trend')
+const isRibbonMode = computed(() => mode.value === 'ribbon_long' || mode.value === 'ribbon_short')
 const threshold = ref(40)
 const holdingDays = ref(10)
 const exitThreshold = ref(30)
@@ -155,16 +160,20 @@ const EXIT_REASON_LABELS = {
   below_ma5: '跌破MA5',
   below_ma10: '跌破MA10',
   below_ma20: '跌破MA20',
+  ribbon_flip_short: '飘带转空',
+  ribbon_flip_long: '飘带转多',
 }
 
 function signalColor(signal) {
   if (signal === 'STRONG_BUY') return 'green'
   if (signal === 'BUY') return 'lime'
+  if (signal === 'RIBBON_LONG') return 'cyan'
+  if (signal === 'RIBBON_SHORT') return 'red'
   return 'default'
 }
 
 function signalLabel(signal) {
-  const labels = { STRONG_BUY: '强烈买入', BUY: '建议买入', NO_ACTION: '观望' }
+  const labels = { STRONG_BUY: '强烈买入', BUY: '建议买入', NO_ACTION: '观望', RIBBON_LONG: '飘带多头', RIBBON_SHORT: '飘带空头' }
   return labels[signal] || signal
 }
 
@@ -178,10 +187,9 @@ async function runBacktest() {
   trades.value = []
   errorMsg.value = ''
   try {
-    const params = {
-      code: code.value,
-      mode: mode.value,
-      threshold: threshold.value,
+    const params = { code: code.value, mode: mode.value }
+    if (!isRibbonMode.value) {
+      params.threshold = threshold.value
     }
     if (mode.value === 'hold') {
       params.holding_days = holdingDays.value

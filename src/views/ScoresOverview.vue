@@ -32,11 +32,14 @@
         >
           <a-row :gutter="[12, 12]">
             <a-col v-for="item in overview.actionable" :key="item.code" :xs="12" :md="6">
-              <div class="stock-card actionable" @click="goDetail(item)">
+              <div class="stock-card actionable" :class="{ 'ribbon-red-warn': item.ema_ribbon === 'red' }" @click="goDetail(item)">
                 <div class="stock-left">
                   <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
                   <div class="stock-meta">
                     <span class="ma5-tag confirmed">MA5确认</span>
+                    <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
+                      {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
+                    </span>
                   </div>
                 </div>
                 <div class="stock-score actionable-score">{{ item.total_score.toFixed(1) }}</div>
@@ -61,6 +64,9 @@
                     <div class="stock-meta">
                       <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
                       <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+                      <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
+                        {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
+                      </span>
                     </div>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px">
@@ -98,6 +104,9 @@
                     <div class="stock-meta">
                       <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
                       <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
+                      <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
+                        {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
+                      </span>
                     </div>
                   </div>
                   <div style="display: flex; align-items: center; gap: 8px">
@@ -132,6 +141,9 @@
                   <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
                   <div class="stock-meta">
                     <span v-if="item.momentum_score >= 70" class="momentum-badge">动量 {{ item.momentum_score }}</span>
+                    <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
+                      {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
+                    </span>
                   </div>
                 </div>
                 <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
@@ -209,8 +221,8 @@ async function loadData() {
 
 function goDetail(item) {
   router.push({
-    name: 'dashboard',
-    query: { code: item.code, date: item.date },
+    name: 'chart',
+    query: { code: item.code },
   })
 }
 
@@ -296,6 +308,35 @@ onMounted(loadData)
   color: #cf1322;
   background: #fff1f0;
   border: 1px solid #ffa39e;
+}
+
+.ribbon-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.ribbon-tag.ribbon-green {
+  color: #389e0d;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
+.ribbon-tag.ribbon-red {
+  color: #cf1322;
+  background: #fff1f0;
+  border: 1px solid #ffa39e;
+}
+
+.ribbon-tag.ribbon-mixed {
+  color: #d48806;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+}
+
+.stock-card.ribbon-red-warn {
+  border-color: #ff7875 !important;
+  background: #fff2f0;
 }
 
 .stock-score {
