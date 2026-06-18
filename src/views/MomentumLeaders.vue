@@ -1,9 +1,9 @@
 <template>
   <div>
-    <!-- 日期选择 -->
-    <a-card size="small" style="margin-bottom: 16px">
-      <a-space>
-        <span style="color: #666">日期</span>
+    <!-- 工具栏 -->
+    <div class="toolbar card" style="margin-bottom: 16px">
+      <div class="toolbar-left">
+        <span class="toolbar-label">日期</span>
         <a-date-picker
           v-model:value="selectedDate"
           placeholder="最新"
@@ -11,41 +11,46 @@
           style="width: 140px"
           @change="loadData"
         />
-        <template v-if="overview">
-          <a-tag color="volcano">主升浪龙头 {{ leaders.length }} 只</a-tag>
-          <a-tag color="orange">可执行 {{ leaders.filter(i => i.above_ma5).length }} 只</a-tag>
-        </template>
-      </a-space>
-    </a-card>
+      </div>
+      <div class="toolbar-stats" v-if="overview">
+        <span class="stat-chip red">主升浪龙头 {{ leaders.length }} 只</span>
+        <span class="stat-chip green">可执行 {{ leaders.filter(i => i.above_ma5).length }} 只</span>
+      </div>
+    </div>
 
     <a-spin :spinning="loading">
       <template v-if="overview">
-        <a-card
-          v-if="leaders.length > 0"
-          title="主升浪龙头（动量评分≥70）"
-          size="small"
-          style="margin-bottom: 16px; border-left: 3px solid #f5222d"
-        >
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="item in leaders" :key="item.code" :xs="12" :md="8">
-              <div class="stock-card momentum" @click="goDetail(item)">
-                <div class="stock-left">
-                  <div class="stock-code">{{ item.code.replace('US.', '').replace('HK.', '') }}</div>
-                  <div class="stock-meta">
-                    <span class="momentum-badge">动量 {{ item.momentum_score }}</span>
-                    <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
-                    <span v-else class="ma5-tag below">MA5下</span>
-                  </div>
+        <div v-if="leaders.length > 0" class="card section">
+          <div class="section-header">
+            <span class="section-title">主升浪龙头</span>
+            <span class="section-badge red">动量评分 ≥ 70</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in leaders"
+              :key="item.code"
+              class="stock-row"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="momentum-bar-wrap">
+                <div class="momentum-bar">
+                  <div class="momentum-fill" :style="{ width: item.momentum_score + '%' }"></div>
                 </div>
-                <div class="stock-score momentum-score">{{ item.total_score.toFixed(1) }}</div>
+                <span class="momentum-val mono">{{ item.momentum_score }}</span>
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
-
+              <div class="row-badges">
+                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                <span v-else class="badge badge-gray">MA5下</span>
+              </div>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+            </div>
+          </div>
+        </div>
         <a-empty v-else description="暂无主升浪龙头" />
       </template>
-
       <a-empty v-else-if="!loading" :description="emptyMessage" />
     </a-spin>
   </div>
@@ -72,6 +77,12 @@ const leaders = computed(() => {
   }))
 })
 
+function scorePillClass(score) {
+  if (score >= 80) return 'score-pill high'
+  if (score >= 60) return 'score-pill mid'
+  return 'score-pill low'
+}
+
 async function loadData() {
   loading.value = true
   overview.value = null
@@ -92,85 +103,151 @@ async function loadData() {
 }
 
 function goDetail(item) {
-  router.push({
-    name: 'dashboard',
-    query: { code: item.code, date: item.date },
-  })
+  router.push({ name: 'chart', query: { code: item.code } })
 }
 
 onMounted(loadData)
 </script>
 
 <style scoped>
-.stock-card {
+.toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
-
-.stock-card:hover {
-  background: #f5f5f5;
-}
-
-.stock-card.momentum {
-  border: 1px solid #f5222d;
-  background: #fff1f0;
-}
-
-.stock-left {
+.toolbar-left {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
-
-.stock-code {
-  font-weight: 600;
-  font-size: 14px;
-  color: #1a1a1a;
+.toolbar-label {
+  font-size: 12px;
+  color: var(--text-muted);
 }
-
-.stock-meta {
+.toolbar-stats {
   display: flex;
   gap: 6px;
 }
-
-.momentum-badge {
+.stat-chip {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  color: #cf1322;
-  background: #fff1f0;
-  border: 1px solid #ffa39e;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
+.stat-chip.red   { color: var(--red);   background: var(--red-bg); }
+.stat-chip.green { color: var(--green); background: var(--green-bg); }
 
-.ma5-tag {
+.section {
+  padding: 0;
+  overflow: hidden;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.section-badge {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
 }
+.section-badge.red { color: var(--red); background: var(--red-bg); }
 
-.ma5-tag.confirmed {
-  color: #389e0d;
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
+.stock-table {
+  display: flex;
+  flex-direction: column;
 }
-
-.ma5-tag.below {
-  color: #999;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
+.stock-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid var(--border-subtle);
 }
+.stock-row:last-child { border-bottom: none; }
+.stock-row:hover { background: var(--bg-hover); }
 
-.stock-score {
+.row-rank {
+  width: 24px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  text-align: right;
+}
+.row-ticker {
+  width: 72px;
+  font-size: 14px;
   font-weight: 700;
-  font-size: 16px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.row-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.momentum-score {
-  color: #cf1322;
+/* Momentum bar */
+.momentum-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 140px;
+  flex-shrink: 0;
 }
+.momentum-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.momentum-fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.momentum-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blue);
+  width: 28px;
+  text-align: right;
+}
+
+.row-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.badge-green { color: var(--green);     background: var(--green-bg); }
+.badge-gray  { color: var(--text-muted); background: var(--bg-hover); }
 </style>

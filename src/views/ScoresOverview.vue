@@ -1,9 +1,9 @@
 <template>
   <div>
-    <!-- 日期选择 -->
-    <a-card size="small" style="margin-bottom: 16px">
-      <a-space>
-        <span style="color: #666">日期</span>
+    <!-- 工具栏 -->
+    <div class="toolbar card" style="margin-bottom: 16px">
+      <div class="toolbar-left">
+        <span class="toolbar-label">日期</span>
         <a-date-picker
           v-model:value="selectedDate"
           placeholder="最新"
@@ -11,146 +11,163 @@
           style="width: 140px"
           @change="loadData"
         />
-        <template v-if="overview">
-          <a-tag>共 {{ overview.total_count }} 只</a-tag>
-          <a-tag color="green">强买 {{ overview.summary.strong_buy_count }}</a-tag>
-          <a-tag color="lime">买入 {{ overview.summary.buy_count }}</a-tag>
-          <a-tag color="orange">可执行 {{ overview.summary.actionable_count }}</a-tag>
-          <a-tag>观望 {{ overview.summary.no_action_count }}</a-tag>
-        </template>
-      </a-space>
-    </a-card>
+      </div>
+      <div class="filter-tabs" v-if="overview">
+        <span class="filter-tab" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">
+          全部 <em>{{ overview.total_count }}</em>
+        </span>
+        <span class="filter-tab blue" :class="{ active: activeFilter === 'actionable' }" @click="activeFilter = 'actionable'">
+          可执行 <em>{{ overview.summary.actionable_count }}</em>
+        </span>
+        <span class="filter-tab green" :class="{ active: activeFilter === 'strong_buy' }" @click="activeFilter = 'strong_buy'">
+          强烈买入 <em>{{ overview.summary.strong_buy_count }}</em>
+        </span>
+        <span class="filter-tab gold" :class="{ active: activeFilter === 'buy' }" @click="activeFilter = 'buy'">
+          建议买入 <em>{{ overview.summary.buy_count }}</em>
+        </span>
+        <span class="filter-tab" :class="{ active: activeFilter === 'no_action' }" @click="activeFilter = 'no_action'">
+          观望 <em>{{ overview.summary.no_action_count }}</em>
+        </span>
+      </div>
+    </div>
 
     <a-spin :spinning="loading">
       <template v-if="overview">
         <!-- 可执行机会 -->
-        <a-card
-          v-if="overview.actionable && overview.actionable.length > 0"
-          title="可执行机会（评分达标 + 站上MA5）"
-          size="small"
-          style="margin-bottom: 16px; border-left: 3px solid #1890ff"
-        >
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.actionable" :key="item.code" :xs="12" :md="6">
-              <div class="stock-card actionable" :class="{ 'ribbon-red-warn': item.ema_ribbon === 'red' }" @click="goDetail(item)">
-                <div class="stock-left">
-                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                  <div class="stock-meta">
-                    <span class="ma5-tag confirmed">MA5确认</span>
-                    <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
-                      {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="stock-score actionable-score">{{ item.total_score.toFixed(1) }}</div>
+        <div v-if="overview.actionable && overview.actionable.length > 0 && (activeFilter === 'all' || activeFilter === 'actionable')" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">可执行机会</span>
+            <span class="section-badge">评分达标 + 站上MA5</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in overview.actionable"
+              :key="item.code"
+              class="stock-row"
+              :class="{ 'ribbon-warn': item.ema_ribbon === 'red' }"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="row-badges">
+                <span class="badge badge-green">MA5✓</span>
+                <span v-if="item.ema_ribbon" class="badge" :class="ribbonBadgeClass(item.ema_ribbon)">
+                  {{ ribbonLabel(item.ema_ribbon) }}
+                </span>
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+            </div>
+          </div>
+        </div>
 
         <!-- STRONG_BUY -->
-        <a-card
-          v-if="overview.strong_buy.length > 0"
-          title="强烈买入 (≥80)"
-          size="small"
-          style="margin-bottom: 16px; border-left: 3px solid #52c41a"
-        >
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.strong_buy" :key="item.code" :xs="24" :md="12">
-              <div class="stock-card-wrapper">
-                <div class="stock-card strong-buy" @click="goDetail(item)">
-                  <div class="stock-left">
-                    <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                    <div class="stock-meta">
-                      <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
-                      <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
-                      <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
-                        {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
-                      </span>
-                    </div>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 8px">
-                    <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
-                    <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
-                  </div>
-                </div>
-                <div v-if="expandedCode === item.code" class="tpsl-detail">
-                  <a-spin v-if="tpslLoading && !tpslData[item.code]" size="small" />
-                  <template v-else-if="tpslData[item.code] && !tpslData[item.code].error">
-                    <span class="tpsl-item">止损 <b class="loss">{{ tpslData[item.code].stop_loss.price.toFixed(2) }}</b> ({{ (tpslData[item.code].stop_loss.distance_pct * 100).toFixed(1) }}%)</span>
-                    <span class="tpsl-item">止盈 <b class="profit">{{ tpslData[item.code].take_profit.price.toFixed(2) }}</b></span>
-                    <span class="tpsl-item">R:R <b>{{ tpslData[item.code].risk_reward_ratio.toFixed(1) }}</b></span>
-                  </template>
-                  <span v-else-if="tpslData[item.code]?.error" style="color: #999; font-size: 12px">{{ tpslData[item.code].error }}</span>
-                </div>
+        <div v-if="overview.strong_buy.length > 0 && (activeFilter === 'all' || activeFilter === 'strong_buy')" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">强烈买入</span>
+            <span class="section-badge green">≥ 80</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in overview.strong_buy"
+              :key="item.code"
+              class="stock-row"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="row-badges">
+                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                <span v-else-if="item.above_ma5 === false" class="badge badge-gray">MA5下</span>
+                <span v-if="item.ema_ribbon" class="badge" :class="ribbonBadgeClass(item.ema_ribbon)">
+                  {{ ribbonLabel(item.ema_ribbon) }}
+                </span>
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+                <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
+              </div>
+            </div>
+            <!-- TP/SL 展开 -->
+            <div v-if="expandedCode && tpslData[expandedCode] && overview.strong_buy.some(i => i.code === expandedCode)" class="tpsl-row">
+              <a-spin v-if="tpslLoading && !tpslData[expandedCode]" size="small" />
+              <template v-else-if="!tpslData[expandedCode]?.error">
+                <span class="tpsl-item">止损 <b class="down">{{ tpslData[expandedCode].stop_loss.price.toFixed(2) }}</b> ({{ (tpslData[expandedCode].stop_loss.distance_pct * 100).toFixed(1) }}%)</span>
+                <span class="tpsl-item">止盈 <b class="up">{{ tpslData[expandedCode].take_profit.price.toFixed(2) }}</b></span>
+                <span class="tpsl-item">R:R <b>{{ tpslData[expandedCode].risk_reward_ratio.toFixed(1) }}</b></span>
+              </template>
+              <span v-else style="color: var(--text-muted); font-size: 12px">{{ tpslData[expandedCode].error }}</span>
+            </div>
+          </div>
+        </div>
 
         <!-- BUY -->
-        <a-card
-          v-if="overview.buy.length > 0"
-          title="建议买入 (60~79)"
-          size="small"
-          style="margin-bottom: 16px; border-left: 3px solid #faad14"
-        >
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.buy" :key="item.code" :xs="24" :md="12">
-              <div class="stock-card-wrapper">
-                <div class="stock-card buy" @click="goDetail(item)">
-                  <div class="stock-left">
-                    <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                    <div class="stock-meta">
-                      <span v-if="item.above_ma5" class="ma5-tag confirmed">MA5上</span>
-                      <span v-else-if="item.above_ma5 === false" class="ma5-tag below">MA5下</span>
-                      <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
-                        {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
-                      </span>
-                    </div>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 8px">
-                    <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
-                    <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
-                  </div>
-                </div>
-                <div v-if="expandedCode === item.code" class="tpsl-detail">
-                  <a-spin v-if="tpslLoading && !tpslData[item.code]" size="small" />
-                  <template v-else-if="tpslData[item.code] && !tpslData[item.code].error">
-                    <span class="tpsl-item">止损 <b class="loss">{{ tpslData[item.code].stop_loss.price.toFixed(2) }}</b> ({{ (tpslData[item.code].stop_loss.distance_pct * 100).toFixed(1) }}%)</span>
-                    <span class="tpsl-item">止盈 <b class="profit">{{ tpslData[item.code].take_profit.price.toFixed(2) }}</b></span>
-                    <span class="tpsl-item">R:R <b>{{ tpslData[item.code].risk_reward_ratio.toFixed(1) }}</b></span>
-                  </template>
-                  <span v-else-if="tpslData[item.code]?.error" style="color: #999; font-size: 12px">{{ tpslData[item.code].error }}</span>
-                </div>
+        <div v-if="overview.buy.length > 0 && (activeFilter === 'all' || activeFilter === 'buy')" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">建议买入</span>
+            <span class="section-badge gold">60 ~ 79</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in overview.buy"
+              :key="item.code"
+              class="stock-row"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="row-badges">
+                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                <span v-else-if="item.above_ma5 === false" class="badge badge-gray">MA5下</span>
+                <span v-if="item.ema_ribbon" class="badge" :class="ribbonBadgeClass(item.ema_ribbon)">
+                  {{ ribbonLabel(item.ema_ribbon) }}
+                </span>
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+                <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
+              </div>
+            </div>
+            <div v-if="expandedCode && tpslData[expandedCode] && overview.buy.some(i => i.code === expandedCode)" class="tpsl-row">
+              <a-spin v-if="tpslLoading && !tpslData[expandedCode]" size="small" />
+              <template v-else-if="!tpslData[expandedCode]?.error">
+                <span class="tpsl-item">止损 <b class="down">{{ tpslData[expandedCode].stop_loss.price.toFixed(2) }}</b> ({{ (tpslData[expandedCode].stop_loss.distance_pct * 100).toFixed(1) }}%)</span>
+                <span class="tpsl-item">止盈 <b class="up">{{ tpslData[expandedCode].take_profit.price.toFixed(2) }}</b></span>
+                <span class="tpsl-item">R:R <b>{{ tpslData[expandedCode].risk_reward_ratio.toFixed(1) }}</b></span>
+              </template>
+              <span v-else style="color: var(--text-muted); font-size: 12px">{{ tpslData[expandedCode].error }}</span>
+            </div>
+          </div>
+        </div>
 
         <!-- NO_ACTION -->
-        <a-card
-          title="观望 (<60)"
-          size="small"
-          style="margin-bottom: 16px; border-left: 3px solid #999"
-        >
-          <a-row :gutter="[12, 12]">
-            <a-col v-for="item in overview.no_action" :key="item.code" :xs="12" :md="6">
-              <div class="stock-card no-action" @click="goDetail(item)">
-                <div class="stock-left">
-                  <div class="stock-code">{{ item.code.replace('US.', '') }}</div>
-                  <div class="stock-meta">
-                    <span v-if="item.momentum_score >= 70" class="momentum-badge">动量 {{ item.momentum_score }}</span>
-                    <span v-if="item.ema_ribbon" class="ribbon-tag" :class="`ribbon-${item.ema_ribbon}`">
-                      {{ item.ema_ribbon === 'green' ? '多头带' : item.ema_ribbon === 'red' ? '空头带' : '纠缠中' }}
-                    </span>
-                  </div>
-                </div>
-                <div class="stock-score">{{ item.total_score.toFixed(1) }}</div>
+        <div v-if="activeFilter === 'all' || activeFilter === 'no_action'" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">观望</span>
+            <span class="section-badge">< 60</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in overview.no_action"
+              :key="item.code"
+              class="stock-row"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="row-badges">
+                <span v-if="item.momentum_score >= 70" class="badge badge-blue">动量 {{ item.momentum_score }}</span>
+                <span v-if="item.ema_ribbon" class="badge" :class="ribbonBadgeClass(item.ema_ribbon)">
+                  {{ ribbonLabel(item.ema_ribbon) }}
+                </span>
               </div>
-            </a-col>
-          </a-row>
-        </a-card>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+            </div>
+          </div>
+        </div>
       </template>
 
       <a-empty v-else-if="!loading" :description="emptyMessage" />
@@ -169,28 +186,40 @@ const loading = ref(true)
 const overview = ref(null)
 const emptyMessage = ref('暂无评分数据')
 
-// 止盈止损展开
+const activeFilter = ref('all')
+
 const expandedCode = ref(null)
 const tpslLoading = ref(false)
 const tpslData = reactive({})
 
+function scorePillClass(score) {
+  if (score >= 80) return 'score-pill high'
+  if (score >= 60) return 'score-pill mid'
+  return 'score-pill low'
+}
+
+function ribbonLabel(ribbon) {
+  if (ribbon === 'green') return '多头带'
+  if (ribbon === 'red') return '空头带'
+  return '纠缠中'
+}
+
+function ribbonBadgeClass(ribbon) {
+  if (ribbon === 'green') return 'badge-green'
+  if (ribbon === 'red') return 'badge-red'
+  return 'badge-gold'
+}
+
 async function toggleTpSl(item, event) {
   event.stopPropagation()
   const code = item.code
-  if (expandedCode.value === code) {
-    expandedCode.value = null
-    return
-  }
+  if (expandedCode.value === code) { expandedCode.value = null; return }
   expandedCode.value = code
   if (tpslData[code]) return
   tpslLoading.value = true
   try {
     const { data } = await getTpSl(code)
-    if (data && data.data !== null) {
-      tpslData[code] = data
-    } else {
-      tpslData[code] = { error: data?.message || '暂无数据' }
-    }
+    tpslData[code] = (data && data.data !== null) ? data : { error: data?.message || '暂无数据' }
   } catch {
     tpslData[code] = { error: '请求失败' }
   } finally {
@@ -201,18 +230,17 @@ async function toggleTpSl(item, event) {
 async function loadData() {
   loading.value = true
   overview.value = null
+  activeFilter.value = 'all'
   try {
     const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
     const res = await getScoresOverview(dateStr)
     const d = res.data
     if (d && d.data === null) {
-      overview.value = null
       emptyMessage.value = d.message || '暂无评分数据'
     } else {
       overview.value = d
     }
   } catch {
-    overview.value = null
     emptyMessage.value = '获取数据失败'
   } finally {
     loading.value = false
@@ -220,185 +248,192 @@ async function loadData() {
 }
 
 function goDetail(item) {
-  router.push({
-    name: 'chart',
-    query: { code: item.code },
-  })
+  router.push({ name: 'chart', query: { code: item.code } })
 }
 
 onMounted(loadData)
 </script>
 
 <style scoped>
-.stock-card {
+/* 工具栏 */
+.toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
+  padding: 10px 16px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
-
-.stock-card:hover {
-  background: #f5f5f5;
-}
-
-.stock-card.strong-buy {
-  border: 1px solid #52c41a;
-}
-
-.stock-card.buy {
-  border: 1px solid #faad14;
-}
-
-.stock-card.no-action {
-  border: 1px solid #d9d9d9;
-}
-
-.stock-card.actionable {
-  border: 1px solid #1890ff;
-  background: #e6f7ff;
-}
-
-.stock-card.momentum {
-  border: 1px solid #f5222d;
-  background: #fff1f0;
-}
-
-.stock-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.stock-code {
-  font-weight: 600;
-  font-size: 14px;
-  color: #1a1a1a;
-}
-
-.stock-meta {
-  display: flex;
-  gap: 6px;
-}
-
-.ma5-tag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-.ma5-tag.confirmed {
-  color: #389e0d;
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
-}
-
-.ma5-tag.below {
-  color: #999;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
-}
-
-.momentum-badge {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  color: #cf1322;
-  background: #fff1f0;
-  border: 1px solid #ffa39e;
-}
-
-.ribbon-tag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-.ribbon-tag.ribbon-green {
-  color: #389e0d;
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
-}
-
-.ribbon-tag.ribbon-red {
-  color: #cf1322;
-  background: #fff1f0;
-  border: 1px solid #ffa39e;
-}
-
-.ribbon-tag.ribbon-mixed {
-  color: #d48806;
-  background: #fffbe6;
-  border: 1px solid #ffe58f;
-}
-
-.stock-card.ribbon-red-warn {
-  border-color: #ff7875 !important;
-  background: #fff2f0;
-}
-
-.stock-score {
-  font-weight: 700;
-  font-size: 16px;
-}
-
-.strong-buy .stock-score {
-  color: #389e0d;
-}
-
-.buy .stock-score {
-  color: #d48806;
-}
-
-.no-action .stock-score {
-  color: #999;
-}
-
-.actionable-score {
-  color: #1890ff;
-}
-
-.momentum-score {
-  color: #cf1322;
-}
-
-.stock-card-wrapper {
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.tpsl-btn {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: #1890ff;
-  background: #e6f7ff;
-  border: 1px solid #91d5ff;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tpsl-btn:hover {
-  background: #bae7ff;
-}
-
-.tpsl-detail {
+.toolbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 6px 14px;
-  background: #fafafa;
-  border-top: 1px dashed #e8e8e8;
+  gap: 8px;
+}
+.toolbar-label {
   font-size: 12px;
+  color: var(--text-muted);
 }
 
-.tpsl-item b.loss {
-  color: #cf1322;
+/* Filter tabs */
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.filter-tab em {
+  font-style: normal;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  opacity: 0.7;
+}
+.filter-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.filter-tab.active {
+  background: var(--bg-emphasis);
+  color: #fff;
+}
+.filter-tab.active em { opacity: 0.8; }
+.filter-tab.blue.active  { background: var(--blue); }
+.filter-tab.green.active { background: var(--green); }
+.filter-tab.gold.active  { background: var(--accent); }
+
+/* Section */
+.section {
+  padding: 0;
+  overflow: hidden;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.section-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+.section-badge.green { color: var(--green); background: var(--green-bg); }
+.section-badge.gold  { color: var(--accent); background: var(--accent-bg); }
+
+/* Table */
+.stock-table {
+  display: flex;
+  flex-direction: column;
 }
 
-.tpsl-item b.profit {
-  color: #389e0d;
+.stock-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid var(--border-subtle);
 }
+.stock-row:last-child {
+  border-bottom: none;
+}
+.stock-row:hover {
+  background: var(--bg-hover);
+}
+.stock-row.ribbon-warn {
+  background: var(--red-bg);
+}
+.stock-row.ribbon-warn:hover {
+  background: #ffd8d4;
+}
+
+.row-rank {
+  width: 24px;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  text-align: right;
+}
+.row-ticker {
+  width: 72px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.row-name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Badges */
+.badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.badge-green { color: var(--green);   background: var(--green-bg); }
+.badge-red   { color: var(--red);     background: var(--red-bg); }
+.badge-gold  { color: var(--accent);  background: var(--accent-bg); }
+.badge-blue  { color: var(--blue);    background: #e3f0ff; }
+.badge-gray  { color: var(--text-muted); background: var(--bg-hover); }
+
+/* TP/SL */
+.tpsl-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--blue);
+  background: #e3f0ff;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tpsl-btn:hover { background: #c8e0ff; }
+
+.tpsl-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 16px 8px 116px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.tpsl-item b.up   { color: var(--green); }
+.tpsl-item b.down { color: var(--red); }
 </style>

@@ -34,6 +34,8 @@ export const getScoresOverview = (date) =>
 export const getMarketTemperature = () => client.get('/api/market-temperature')
 export const getMarketTemperatureHistory = (days = 30) =>
   client.get('/api/market-temperature/history', { params: { days } })
+export const getAssetTemperatureHistory = (asset, days = 60) =>
+  client.get('/api/asset-temperature/history', { params: { asset, days } })
 
 // ── 止盈止损 ──
 export const getTpSl = (code, params) =>

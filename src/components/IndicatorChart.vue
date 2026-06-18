@@ -1,345 +1,519 @@
 <template>
-  <div ref="chartRef" :style="{ width: '100%', height: totalHeight + 'px' }" />
+  <div class="lw-outer" :style="{ height: totalHeight + 'px' }">
+    <div ref="containerRef" class="lw-inner" />
+    <div ref="legendRef" class="lw-legend" />
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, shallowRef } from 'vue'
-import * as echarts from 'echarts'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { createChart, ColorType, LineStyle, CrosshairMode } from 'lightweight-charts'
 
 const props = defineProps({
-  data: { type: Array, default: () => [] },
-  height: { type: Number, default: 800 },
+  data:    { type: Array,  default: () => [] },
+  height:  { type: Number, default: 800 },
   visible: {
     type: Object,
     default: () => ({
-      ma5: true, ma10: true, ma20: false, ma60: false,
-      boll: true, ema: false, vol: true, macd: true, rsi: true,
+      ma5: false, ma10: false, ma20: false, ma60: false,
+      boll: false, ema: true, vol: true, macd: true, rsi: true,
     }),
   },
 })
 
-const chartRef = ref(null)
-const chart = shallowRef(null)
+const containerRef = ref(null)
+const legendRef    = ref(null)
+let chart = null
+let seriesRefs = {}
 
-// ── 颜色常量 ─────────────────────────────────────────────
-const UP_COLOR = '#ef5350'
-const DOWN_COLOR = '#26a69a'
-const MA_COLORS = { ma5: '#ff9800', ma10: '#2196f3', ma20: '#e91e63', ma60: '#9c27b0' }
-const BOLL_COLOR = '#795548'
-const EMA_COLORS = {
-  ema5: '#e53935', ema10: '#ff7043', ema15: '#ffa726',
-  ema20: '#66bb6a', ema25: '#42a5f5', ema30: '#5c6bc0',
-}
-const DIF_COLOR = '#ff9800'
-const DEA_COLOR = '#2196f3'
-const RSI_COLOR = '#ff5722'
+// ── 配色 ──
+const UP   = '#ef5350'
+const DOWN = '#26a69a'
+const MA_COLORS  = { ma5: '#ff9800', ma10: '#2196f3', ma20: '#e91e63', ma60: '#9c27b0' }
+const BOLL_COLOR = '#8d6e63'
 
-// 根据可见子图数量动态计算高度
-const SUB_CHART_HEIGHT = 120 // 每个子图固定高度 px
-const DATAZOOM_HEIGHT = 36
-const MAIN_MIN = 350
+// ── 布局 ──
+const SUB_H    = 130
+const MAIN_MIN = 360
 
 const totalHeight = computed(() => {
-  const subCount = [props.visible.vol, props.visible.macd, props.visible.rsi].filter(Boolean).length
-  return Math.max(props.height, MAIN_MIN + subCount * SUB_CHART_HEIGHT + DATAZOOM_HEIGHT + 30)
+  const n = [props.visible.vol, props.visible.macd, props.visible.rsi].filter(Boolean).length
+  return Math.max(props.height, MAIN_MIN + n * SUB_H)
 })
 
-// ── 动态布局计算 ──────────────────────────────────────────
-function calcLayout(vis) {
-  const subs = []
-  if (vis.vol) subs.push('vol')
-  if (vis.macd) subs.push('macd')
-  if (vis.rsi) subs.push('rsi')
-
-  const total = totalHeight.value - DATAZOOM_HEIGHT
-  const subTotal = subs.length * SUB_CHART_HEIGHT
-  const mainH = total - subTotal - 30 // 30 px padding
-  const gap = 12
-
-  const grids = [{ left: 68, right: 68, top: 30, height: mainH }]
-  const paneMap = {} // 'vol' -> gridIndex
-  let cursor = 30 + mainH + gap
-
-  for (const key of subs) {
-    paneMap[key] = grids.length
-    grids.push({ left: 68, right: 68, top: cursor, height: SUB_CHART_HEIGHT - gap })
-    cursor += SUB_CHART_HEIGHT
+function getMargins(vis, h) {
+  const subs = ['vol', 'macd', 'rsi'].filter(k => vis[k])
+  const frac = SUB_H / h
+  const gap  = 4 / h
+  const mainBottom = subs.length === 0 ? 0.03 : subs.length * (frac + gap) + 0.01
+  const result = { main: { top: 0.04, bottom: mainBottom } }
+  let bottom = 0.01
+  for (const key of [...subs].reverse()) {
+    result[key] = { top: 1 - bottom - frac, bottom }
+    bottom += frac + gap
   }
-
-  return { grids, paneMap, subs }
+  return result
 }
 
-function buildOption(raw, vis) {
-  if (!raw || raw.length === 0) {
-    return { title: { text: '暂无数据', left: 'center', top: 'center' } }
+// ── EMA 飘带 Primitive（填充色带）──
+class EmaRibbonPrimitive {
+  constructor() {
+    this._rawData = []   // [{time, v5, v30}]
+    this._chart   = null
+    this._series  = null
   }
 
-  const { grids, paneMap, subs } = calcLayout(vis)
-  const dates = raw.map((d) => d.date)
-  const ohlc = raw.map((d) => [d.open, d.close, d.low, d.high])
+  setData(ema5Data, ema30Data) {
+    const map5  = new Map(ema5Data.map(d => [d.time, d.value]))
+    const map30 = new Map(ema30Data.map(d => [d.time, d.value]))
+    const times = [...new Set([...map5.keys(), ...map30.keys()])].sort()
+    this._rawData = times
+      .filter(t => map5.has(t) && map30.has(t))
+      .map(t => ({ time: t, v5: map5.get(t), v30: map30.get(t) }))
+  }
 
-  // ── 构建 axes ──
-  const xAxes = []
-  const yAxes = []
-  const xAxisIndexes = []
+  attached({ chart, series }) { this._chart = chart; this._series = series }
+  detached()                  { this._chart = null;  this._series = null  }
 
-  for (let i = 0; i < grids.length; i++) {
-    const isLast = i === grids.length - 1
-    xAxes.push({
-      type: 'category',
-      data: dates,
-      gridIndex: i,
-      boundaryGap: true,
-      axisLine: { lineStyle: { color: '#ccc' } },
-      axisLabel: { show: isLast, fontSize: 10 },
+  updateAllViews() {}
+
+  paneViews() {
+    const self = this
+    return [{
+      zOrder:   () => 'bottom',
+      renderer: () => ({ draw: target => self._draw(target) }),
+    }]
+  }
+
+  _draw(target) {
+    if (!this._chart || !this._series || this._rawData.length < 2) return
+    const ts = this._chart.timeScale()
+
+    target.useMediaCoordinateSpace(({ context }) => {
+      // 转换为画布坐标
+      const pts = this._rawData
+        .map(d => ({
+          x:   ts.timeToCoordinate(d.time),
+          y5:  this._series.priceToCoordinate(d.v5),
+          y30: this._series.priceToCoordinate(d.v30),
+        }))
+        .filter(p => p.x != null && p.y5 != null && p.y30 != null)
+
+      if (pts.length < 2) return
+
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1]
+        // Canvas Y 轴向下：y5 < y30 表示 ema5 在上方（多头）
+        const aBull = a.y5 <= a.y30
+        const bBull = b.y5 <= b.y30
+
+        if (aBull === bBull) {
+          // 同一趋势段：绘制四边形
+          context.fillStyle = aBull ? 'rgba(38,166,154,0.20)' : 'rgba(239,83,80,0.20)'
+          context.beginPath()
+          context.moveTo(a.x, a.y5)
+          context.lineTo(b.x, b.y5)
+          context.lineTo(b.x, b.y30)
+          context.lineTo(a.x, a.y30)
+          context.closePath()
+          context.fill()
+        } else {
+          // 交叉：线性插值找交点，分两个三角形
+          const da = a.y30 - a.y5
+          const db = b.y30 - b.y5
+          const t  = da / (da - db)
+          const xc = a.x  + t * (b.x  - a.x)
+          const yc = a.y5 + t * (b.y5 - a.y5)
+
+          context.fillStyle = aBull ? 'rgba(38,166,154,0.20)' : 'rgba(239,83,80,0.20)'
+          context.beginPath()
+          context.moveTo(a.x, a.y5)
+          context.lineTo(xc, yc)
+          context.lineTo(a.x, a.y30)
+          context.closePath()
+          context.fill()
+
+          context.fillStyle = bBull ? 'rgba(38,166,154,0.20)' : 'rgba(239,83,80,0.20)'
+          context.beginPath()
+          context.moveTo(xc, yc)
+          context.lineTo(b.x, b.y5)
+          context.lineTo(b.x, b.y30)
+          context.closePath()
+          context.fill()
+        }
+      }
     })
-    const yOpt = { scale: true, gridIndex: i, splitLine: { lineStyle: { color: '#f0f0f0' } } }
-    // 特殊 y 轴配置
-    if (paneMap.vol === i) {
-      yOpt.axisLabel = { formatter: (v) => (v >= 1e6 ? (v / 1e6).toFixed(0) + 'M' : v) }
-    }
-    if (paneMap.rsi === i) {
-      yOpt.min = 0
-      yOpt.max = 100
-    }
-    yAxes.push(yOpt)
-    xAxisIndexes.push(i)
+  }
+}
+
+// ── 格式化 ──
+function fmtPrice(v) {
+  if (v == null || isNaN(+v)) return '--'
+  const n = +v
+  return n >= 1000 ? n.toFixed(1) : n.toFixed(2)
+}
+function fmtVol(v) {
+  if (v == null || isNaN(+v)) return '--'
+  const n = +v
+  if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿'
+  if (n >= 1e4) return (n / 1e4).toFixed(1) + '万'
+  return Math.round(n).toLocaleString()
+}
+function fmtInd(v, d = 2) {
+  if (v == null || isNaN(+v)) return '--'
+  return (+v).toFixed(d)
+}
+
+// ── 图例 HTML ──
+function buildLegendHTML(param, vis, margins, h, raw) {
+  const hasHover = param?.time != null
+  const last = raw[raw.length - 1]
+
+  const sv = (key) => {
+    if (!hasHover || !param?.seriesData || !seriesRefs[key]) return null
+    return param.seriesData.get(seriesRefs[key])?.value ?? null
+  }
+  const val = (seriesKey, rawKey) => {
+    const v = sv(seriesKey)
+    return v != null ? v : (!hasHover ? (last[rawKey] ?? null) : null)
   }
 
-  // ── 构建 series ──
-  const series = []
+  let ohlc
+  if (hasHover && param?.seriesData && seriesRefs.candle) {
+    ohlc = param.seriesData.get(seriesRefs.candle) || last
+  } else {
+    ohlc = last
+  }
+  const isUp = (+ohlc.close || 0) >= (+ohlc.open || 0)
+  const sep = `<span class="leg-sep">|</span>`
 
-  // K 线（始终显示）
-  series.push({
-    name: 'K线',
-    type: 'candlestick',
-    data: ohlc,
-    xAxisIndex: 0,
-    yAxisIndex: 0,
-    itemStyle: {
-      color: UP_COLOR, color0: DOWN_COLOR,
-      borderColor: UP_COLOR, borderColor0: DOWN_COLOR,
+  // 主图行
+  let mainParts = [
+    `<span style="color:${isUp ? UP : DOWN}">O:${fmtPrice(ohlc.open)} H:${fmtPrice(ohlc.high)} L:${fmtPrice(ohlc.low)} C:${fmtPrice(ohlc.close)}</span>`,
+  ]
+  if (vis.ema) {
+    const e5  = val('ema5',  'ema5')
+    const e30 = val('ema30', 'ema30')
+    if (e5  != null) mainParts.push(`<span style="color:rgba(38,166,154,0.9)">EMA5:${fmtPrice(e5)}</span>`)
+    if (e30 != null) mainParts.push(`<span style="color:rgba(239,83,80,0.85)">EMA30:${fmtPrice(e30)}</span>`)
+  }
+  for (const [key, color] of Object.entries(MA_COLORS)) {
+    if (!vis[key]) continue
+    const v = val(key, key)
+    if (v != null) mainParts.push(`<span style="color:${color}">${key.toUpperCase()}:${fmtPrice(v)}</span>`)
+  }
+  if (vis.boll) {
+    const bu = val('boll_upper', 'boll_upper')
+    const bm = val('boll_mid',   'boll_mid')
+    const bl = val('boll_lower', 'boll_lower')
+    if (bu != null)
+      mainParts.push(`<span style="color:${BOLL_COLOR}">U:${fmtPrice(bu)} M:${fmtPrice(bm)} L:${fmtPrice(bl)}</span>`)
+  }
+
+  let html = `<div class="leg-row" style="top:6px">${mainParts.join(sep)}</div>`
+
+  // 成交量行
+  if (vis.vol && margins.vol) {
+    const paneTop = Math.round(margins.vol.top * h) + 4
+    let v = sv('vol')
+    if (v == null && !hasHover) v = last.volume
+    const vma = val('vol_ma20', 'vol_ma20')
+    let parts = [`<span style="color:#607d8b">VOL:${fmtVol(v)}</span>`]
+    if (vma != null) parts.push(`<span style="color:#ff9800">MA20:${fmtVol(vma)}</span>`)
+    html += `<div class="leg-row" style="top:${paneTop}px">${parts.join(sep)}</div>`
+  }
+
+  // MACD 行
+  if (vis.macd && margins.macd) {
+    const paneTop = Math.round(margins.macd.top * h) + 4
+    const dif  = val('dif', 'dif')
+    const dea  = val('dea', 'dea')
+    let   macd = sv('macd')
+    if (macd == null && !hasHover) macd = last.macd
+    let parts = []
+    if (dif  != null) parts.push(`<span style="color:#ff9800">DIF:${fmtInd(dif)}</span>`)
+    if (dea  != null) parts.push(`<span style="color:#2196f3">DEA:${fmtInd(dea)}</span>`)
+    if (macd != null) parts.push(`<span style="color:${(+macd >= 0) ? UP : DOWN}">MACD:${fmtInd(macd)}</span>`)
+    html += `<div class="leg-row" style="top:${paneTop}px">${parts.join(sep)}</div>`
+  }
+
+  // RSI 行
+  if (vis.rsi && margins.rsi) {
+    const paneTop = Math.round(margins.rsi.top * h) + 4
+    const rsi = val('rsi', 'rsi6')
+    html += `<div class="leg-row" style="top:${paneTop}px"><span style="color:#ff5722">RSI6:${fmtInd(rsi)}</span></div>`
+  }
+
+  return html
+}
+
+// ── 建图 ──
+function buildChart() {
+  if (!containerRef.value) return
+  if (chart) { chart.remove(); chart = null }
+  seriesRefs = {}
+
+  const raw = props.data
+  if (!raw || raw.length === 0) return
+
+  const vis     = props.visible
+  const h       = totalHeight.value
+  const margins = getMargins(vis, h)
+
+  chart = createChart(containerRef.value, {
+    width:  containerRef.value.clientWidth,
+    height: h,
+    layout: {
+      background: { type: ColorType.Solid, color: '#ffffff' },
+      textColor:  '#59636e',
+      fontSize:   11,
+      fontFamily: "'DM Mono', 'JetBrains Mono', SFMono-Regular, monospace",
     },
+    grid: {
+      vertLines: { color: '#e8ecf0' },
+      horzLines: { color: '#e8ecf0' },
+    },
+    crosshair: {
+      mode:     CrosshairMode.Normal,
+      vertLine: { color: '#8b949e', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1f2328' },
+      horzLine: { color: '#8b949e', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1f2328' },
+    },
+    rightPriceScale: { borderColor: '#e8ecf0', textColor: '#8b949e' },
+    timeScale: { borderColor: '#e8ecf0', timeVisible: false },
   })
 
-  // MA 线
-  const maKeys = ['ma5', 'ma10', 'ma20', 'ma60']
-  for (const key of maKeys) {
-    if (vis[key]) {
-      series.push(makeLine(key.toUpperCase(), raw.map((d) => d[key]), 0, 0, MA_COLORS[key]))
-    }
-  }
+  // ── 蜡烛图 ──
+  const candleSeries = chart.addCandlestickSeries({
+    upColor: UP, downColor: DOWN,
+    borderUpColor: UP, borderDownColor: DOWN,
+    wickUpColor: UP, wickDownColor: DOWN,
+  })
+  seriesRefs.candle = candleSeries
+  chart.priceScale('right').applyOptions({ scaleMargins: margins.main })
+  candleSeries.setData(
+    raw.map(d => ({ time: d.date, open: +d.open, high: +d.high, low: +d.low, close: +d.close }))
+  )
 
-  // 布林带
-  if (vis.boll) {
-    series.push(makeLine('BOLL上轨', raw.map((d) => d.boll_upper), 0, 0, BOLL_COLOR, 'dashed'))
-    series.push(makeLine('BOLL中轨', raw.map((d) => d.boll_mid), 0, 0, BOLL_COLOR, 'dotted'))
-    series.push(makeLine('BOLL下轨', raw.map((d) => d.boll_lower), 0, 0, BOLL_COLOR, 'dashed'))
-  }
-
-  // EMA 多空飘带（实心色带）+ 翻转标记
-  const hasEma = vis.ema && raw.some((d) => d.ema5 != null && d.ema30 != null)
-  if (hasEma) {
-    // 计算翻转点
-    const bullMarkPoints = []  // 空转多
-    const bearMarkPoints = []  // 多转空
+  // ── EMA 飘带 ──
+  if (vis.ema) {
+    // 翻转标记
+    const markers = []
     for (let i = 1; i < raw.length; i++) {
-      const prev = raw[i - 1]
-      const cur = raw[i]
-      if (prev.ema5 == null || prev.ema30 == null || cur.ema5 == null || cur.ema30 == null) continue
-      const prevBull = prev.ema5 >= prev.ema30
-      const curBull = cur.ema5 >= cur.ema30
-      if (!prevBull && curBull) {
-        bullMarkPoints.push({ coord: [i, cur.low], value: '多' })
-      } else if (prevBull && !curBull) {
-        bearMarkPoints.push({ coord: [i, cur.high], value: '空' })
-      }
+      const p = raw[i - 1], c = raw[i]
+      if (!p.ema5 || !p.ema30 || !c.ema5 || !c.ema30) continue
+      if (p.ema5 < p.ema30 && c.ema5 >= c.ema30)
+        markers.push({ time: c.date, position: 'belowBar', color: DOWN, shape: 'arrowUp',   text: '转多', size: 1 })
+      else if (p.ema5 >= p.ema30 && c.ema5 < c.ema30)
+        markers.push({ time: c.date, position: 'aboveBar', color: UP,   shape: 'arrowDown', text: '转空', size: 1 })
     }
+    if (markers.length) candleSeries.setMarkers(markers)
 
-    series.push({
-      name: 'EMA多空带',
-      type: 'custom',
-      xAxisIndex: 0,
-      yAxisIndex: 0,
-      data: raw.map((d, i) => [i, d.ema5, d.ema30]),
-      renderItem(params, api) {
-        const idx = params.dataIndex
-        if (idx >= raw.length - 1) return null
-        const cur = raw[idx]
-        const nxt = raw[idx + 1]
-        if (cur.ema5 == null || cur.ema30 == null || nxt.ema5 == null || nxt.ema30 == null) return null
+    // 填充色带 Primitive（附加到蜡烛图系列，使用主图价格坐标）
+    const ema5Data  = raw.filter(d => d.ema5  != null).map(d => ({ time: d.date, value: +d.ema5  }))
+    const ema30Data = raw.filter(d => d.ema30 != null).map(d => ({ time: d.date, value: +d.ema30 }))
+    const ribbon = new EmaRibbonPrimitive()
+    ribbon.setData(ema5Data, ema30Data)
+    candleSeries.attachPrimitive(ribbon)
 
-        const p1 = api.coord([idx, cur.ema5])
-        const p2 = api.coord([idx + 1, nxt.ema5])
-        const p3 = api.coord([idx + 1, nxt.ema30])
-        const p4 = api.coord([idx, cur.ema30])
-
-        const avgShort = (cur.ema5 + nxt.ema5) / 2
-        const avgLong = (cur.ema30 + nxt.ema30) / 2
-        const isBull = avgShort >= avgLong
-
-        return {
-          type: 'polygon',
-          shape: { points: [p1, p2, p3, p4] },
-          style: { fill: isBull ? 'rgba(38,166,154,0.7)' : 'rgba(239,83,80,0.7)' },
-          silent: true,
-        }
-      },
+    // EMA5 线（用于图例 + 辅助视觉）
+    const ema5Series = chart.addLineSeries({
+      color: 'rgba(38,166,154,0.9)', lineWidth: 1,
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
     })
+    seriesRefs.ema5 = ema5Series
+    ema5Series.setData(ema5Data)
 
-    // 空转多标记（绿色向上箭头，打在当日最低价下方）
-    if (bullMarkPoints.length > 0) {
-      series.push({
-        name: '空转多',
-        type: 'scatter',
-        xAxisIndex: 0,
-        yAxisIndex: 0,
-        data: bullMarkPoints.map((p) => ({ value: p.coord, label: p.value })),
-        symbol: 'triangle',
-        symbolSize: 12,
-        symbolOffset: [0, '60%'],
-        itemStyle: { color: '#26a69a' },
-        label: {
-          show: true,
-          formatter: '转多',
-          position: 'bottom',
-          fontSize: 10,
-          color: '#26a69a',
-          fontWeight: 'bold',
-        },
-        tooltip: {
-          formatter: (p) => `${dates[p.value[0]] ?? ''}<br/>飘带 空转多`,
-        },
+    // EMA30 线（虚线）
+    const ema30Series = chart.addLineSeries({
+      color: 'rgba(239,83,80,0.75)', lineWidth: 1, lineStyle: LineStyle.Dashed,
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+    })
+    seriesRefs.ema30 = ema30Series
+    ema30Series.setData(ema30Data)
+  }
+
+  // ── MA 均线 ──
+  for (const [key, color] of Object.entries(MA_COLORS)) {
+    if (!vis[key]) continue
+    const s = chart.addLineSeries({
+      color, lineWidth: 1,
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+    })
+    seriesRefs[key] = s
+    s.setData(raw.filter(d => d[key] != null).map(d => ({ time: d.date, value: +d[key] })))
+  }
+
+  // ── 布林带 ──
+  if (vis.boll) {
+    for (const [field, style] of [
+      ['boll_upper', LineStyle.Dashed],
+      ['boll_mid',   LineStyle.Dotted],
+      ['boll_lower', LineStyle.Dashed],
+    ]) {
+      const s = chart.addLineSeries({
+        color: BOLL_COLOR, lineWidth: 1, lineStyle: style,
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
       })
+      seriesRefs[field] = s
+      s.setData(raw.filter(d => d[field] != null).map(d => ({ time: d.date, value: +d[field] })))
     }
+  }
 
-    // 多转空标记（红色向下箭头，打在当日最高价上方）
-    if (bearMarkPoints.length > 0) {
-      series.push({
-        name: '多转空',
-        type: 'scatter',
-        xAxisIndex: 0,
-        yAxisIndex: 0,
-        data: bearMarkPoints.map((p) => ({ value: p.coord, label: p.value })),
-        symbol: 'triangle',
-        symbolSize: 12,
-        symbolRotate: 180,
-        symbolOffset: [0, '-60%'],
-        itemStyle: { color: '#ef5350' },
-        label: {
-          show: true,
-          formatter: '转空',
-          position: 'top',
-          fontSize: 10,
-          color: '#ef5350',
-          fontWeight: 'bold',
-        },
-        tooltip: {
-          formatter: (p) => `${dates[p.value[0]] ?? ''}<br/>飘带 多转空`,
-        },
+  // ── 成交量 ──
+  if (vis.vol && margins.vol) {
+    const volSeries = chart.addHistogramSeries({
+      priceScaleId: 'vol',
+      priceFormat:  { type: 'volume' },
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    seriesRefs.vol = volSeries
+    chart.priceScale('vol').applyOptions({ scaleMargins: margins.vol })
+    volSeries.setData(
+      raw.map(d => ({
+        time:  d.date,
+        value: +d.volume,
+        color: d.close >= d.open ? UP + 'aa' : DOWN + 'aa',
+      }))
+    )
+    if (raw.some(d => d.vol_ma20 != null)) {
+      const vma = chart.addLineSeries({
+        color: '#ff9800', lineWidth: 1, priceScaleId: 'vol',
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
       })
+      seriesRefs.vol_ma20 = vma
+      vma.setData(raw.filter(d => d.vol_ma20 != null).map(d => ({ time: d.date, value: +d.vol_ma20 })))
     }
   }
 
-  // 成交量
-  if (paneMap.vol != null) {
-    const gi = paneMap.vol
-    const volColors = raw.map((d) => (d.close >= d.open ? UP_COLOR : DOWN_COLOR))
-    series.push({
-      name: '成交量',
-      type: 'bar',
-      data: raw.map((d) => d.volume),
-      xAxisIndex: gi, yAxisIndex: gi,
-      itemStyle: { color: (p) => volColors[p.dataIndex] },
+  // ── MACD ──
+  if (vis.macd && margins.macd) {
+    const macdHist = chart.addHistogramSeries({
+      priceScaleId: 'macd',
+      lastValueVisible: false, priceLineVisible: false,
     })
-    series.push(makeLine('VOL MA20', raw.map((d) => d.vol_ma20), gi, gi, '#ff9800'))
-  }
-
-  // MACD
-  if (paneMap.macd != null) {
-    const gi = paneMap.macd
-    const macdHist = raw.map((d) => d.macd)
-    const macdColors = macdHist.map((v) => (v >= 0 ? UP_COLOR : DOWN_COLOR))
-    series.push({
-      name: 'MACD',
-      type: 'bar',
-      data: macdHist,
-      xAxisIndex: gi, yAxisIndex: gi,
-      itemStyle: { color: (p) => macdColors[p.dataIndex] },
+    seriesRefs.macd = macdHist
+    chart.priceScale('macd').applyOptions({ scaleMargins: margins.macd })
+    macdHist.setData(
+      raw.map(d => ({
+        time:  d.date,
+        value: d.macd ?? 0,
+        color: (d.macd ?? 0) >= 0 ? UP + 'aa' : DOWN + 'aa',
+      }))
+    )
+    const difSeries = chart.addLineSeries({
+      color: '#ff9800', lineWidth: 1, priceScaleId: 'macd',
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
     })
-    series.push(makeLine('DIF', raw.map((d) => d.dif), gi, gi, DIF_COLOR))
-    series.push(makeLine('DEA', raw.map((d) => d.dea), gi, gi, DEA_COLOR))
-  }
+    seriesRefs.dif = difSeries
+    difSeries.setData(raw.filter(d => d.dif != null).map(d => ({ time: d.date, value: +d.dif })))
 
-  // RSI
-  if (paneMap.rsi != null) {
-    const gi = paneMap.rsi
-    series.push(makeLine('RSI14', raw.map((d) => d.rsi14), gi, gi, RSI_COLOR))
-    series.push({
-      name: '超买', type: 'line',
-      data: new Array(dates.length).fill(70),
-      xAxisIndex: gi, yAxisIndex: gi,
-      lineStyle: { color: '#ccc', type: 'dashed', width: 1 },
-      symbol: 'none', tooltip: { show: false },
+    const deaSeries = chart.addLineSeries({
+      color: '#2196f3', lineWidth: 1, priceScaleId: 'macd',
+      lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
     })
-    series.push({
-      name: '超卖', type: 'line',
-      data: new Array(dates.length).fill(30),
-      xAxisIndex: gi, yAxisIndex: gi,
-      lineStyle: { color: '#ccc', type: 'dashed', width: 1 },
-      symbol: 'none', tooltip: { show: false },
+    seriesRefs.dea = deaSeries
+    deaSeries.setData(raw.filter(d => d.dea != null).map(d => ({ time: d.date, value: +d.dea })))
+  }
+
+  // ── RSI ──
+  if (vis.rsi && margins.rsi) {
+    const rsiSeries = chart.addLineSeries({
+      color: '#ff5722', lineWidth: 1.5, priceScaleId: 'rsi',
+      lastValueVisible: false, priceLineVisible: false,
     })
+    seriesRefs.rsi = rsiSeries
+    chart.priceScale('rsi').applyOptions({ scaleMargins: margins.rsi })
+    rsiSeries.setData(raw.filter(d => d.rsi6 != null).map(d => ({ time: d.date, value: +d.rsi6 })))
+
+    for (const [val, color] of [[70, UP + '55'], [30, DOWN + '55']]) {
+      const refLine = chart.addLineSeries({
+        color, lineWidth: 1, lineStyle: LineStyle.Dashed, priceScaleId: 'rsi',
+        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+      })
+      refLine.setData(raw.map(d => ({ time: d.date, value: val })))
+    }
   }
 
-  return {
-    animation: false,
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' },
-      backgroundColor: 'rgba(255,255,255,0.95)',
-      borderColor: '#ccc',
-      textStyle: { color: '#333', fontSize: 12 },
-    },
-    axisPointer: { link: [{ xAxisIndex: 'all' }] },
-    grid: grids,
-    xAxis: xAxes,
-    yAxis: yAxes,
-    dataZoom: [
-      { type: 'inside', xAxisIndex: xAxisIndexes, start: 60, end: 100 },
-      { type: 'slider', xAxisIndex: xAxisIndexes, bottom: 5, height: 20, start: 60, end: 100 },
-    ],
-    series,
-  }
-}
+  chart.timeScale().fitContent()
 
-function makeLine(name, data, xIdx, yIdx, color, lineType = 'solid') {
-  return {
-    name, type: 'line', data,
-    xAxisIndex: xIdx, yAxisIndex: yIdx,
-    lineStyle: { color, width: 1, type: lineType },
-    symbol: 'none', connectNulls: false,
+  // 初始图例（最后一根 K 线）
+  if (legendRef.value) {
+    legendRef.value.innerHTML = buildLegendHTML(null, vis, margins, h, raw)
   }
-}
 
-function renderChart() {
-  if (!chartRef.value) return
-  if (chart.value) chart.value.dispose()
-  chart.value = echarts.init(chartRef.value)
-  chart.value.setOption(buildOption(props.data, props.visible))
+  // 十字准线图例
+  chart.subscribeCrosshairMove(param => {
+    if (legendRef.value) {
+      legendRef.value.innerHTML = buildLegendHTML(param, vis, margins, h, raw)
+    }
+  })
 }
 
 let ro = null
+
 onMounted(() => {
-  renderChart()
-  ro = new ResizeObserver(() => chart.value?.resize())
-  ro.observe(chartRef.value)
+  buildChart()
+  ro = new ResizeObserver(() => {
+    if (chart && containerRef.value) {
+      chart.applyOptions({ width: containerRef.value.clientWidth, height: totalHeight.value })
+    }
+  })
+  if (containerRef.value) ro.observe(containerRef.value)
 })
 
 onUnmounted(() => {
   ro?.disconnect()
-  chart.value?.dispose()
+  chart?.remove()
+  chart = null
 })
 
-// 数据或可见性变化时重绘（dispose + init 确保 grid 数量变化正确）
-watch([() => props.data, () => props.visible], renderChart, { deep: true })
+watch([() => props.data, () => props.visible], buildChart, { deep: true })
 </script>
+
+<style scoped>
+.lw-outer {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+.lw-inner {
+  position: absolute;
+  inset: 0;
+}
+.lw-legend {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+</style>
+
+<style>
+/* 动态注入的 HTML 不受 scoped 限制，需全局定义 */
+.leg-row {
+  position: absolute;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  font-family: 'DM Mono', 'JetBrains Mono', SFMono-Regular, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #59636e;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 1px 6px;
+  border-radius: 3px;
+  max-width: calc(100% - 80px);
+}
+.leg-sep {
+  color: #d0d7de;
+  margin: 0 1px;
+  font-size: 10px;
+}
+</style>

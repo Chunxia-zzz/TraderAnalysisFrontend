@@ -1,0 +1,68 @@
+:root {
+  /* Background */
+  --bg: #f6f8fa;
+  --bg-card: #ffffff;
+  --bg-hover: #f0f2f4;
+  --bg-emphasis: #1f2328;
+
+  /* Border */
+  --border: #d1d9e0;
+  --border-subtle: #e8ecf0;
+
+  /* Text */
+  --text: #1f2328;
+  --text-secondary: #59636e;
+  --text-muted: #8b949e;
+
+  /* Accent (深金) */
+  --accent: #946800;
+  --accent-bg: #fff8e1;
+
+  /* Green (涨/正向) */
+  --green: #1a7f37;
+  --green-bg: #dafbe1;
+
+  /* Red (跌/负向) */
+  --red: #a40e26;
+  --red-bg: #ffebe9;
+
+  /* Blue (辅助) */
+  --blue: #0550ae;
+
+  /* Shape */
+  --radius: 8px;
+  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.04);
+  --shadow-md: 0 2px 8px rgba(31, 35, 40, 0.08);
+}
+
+/* ── 工具类 ── */
+
+.mono {
+  font-family: 'DM Mono', 'JetBrains Mono', SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.up, .positive { color: var(--green); }
+.down, .negative { color: var(--red); }
+
+/* Score pill */
+.score-pill {
+  display: inline-block;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.score-pill.high  { color: var(--green);  background: var(--green-bg); }
+.score-pill.mid   { color: var(--accent); background: var(--accent-bg); }
+.score-pill.low   { color: var(--text-muted); background: var(--bg-hover); }
+
+/* Card */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}

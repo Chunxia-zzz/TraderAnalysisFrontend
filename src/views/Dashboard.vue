@@ -131,12 +131,11 @@ const indicatorLoading = ref(true)
 const scoreLoading = ref(true)
 
 const scoreColor = computed(() => {
-  if (!score.value) return '#999'
+  if (!score.value) return 'var(--text-muted)'
   const s = score.value.total_score
-  if (s >= 90) return '#52c41a'
-  if (s >= 70) return '#73d13d'
-  if (s >= 40) return '#faad14'
-  return '#999'
+  if (s >= 80) return 'var(--green)'
+  if (s >= 60) return 'var(--accent)'
+  return 'var(--text-muted)'
 })
 
 const signalTagColor = computed(() => {
@@ -167,9 +166,9 @@ function factorLabel(key) {
 }
 
 function getRatioColor(ratio) {
-  if (ratio >= 0.7) return '#52c41a'
-  if (ratio >= 0.4) return '#faad14'
-  return '#999'
+  if (ratio >= 0.7) return 'var(--green)'
+  if (ratio >= 0.4) return 'var(--accent)'
+  return 'var(--text-muted)'
 }
 
 function fmt(val) {
@@ -250,16 +249,17 @@ onMounted(async () => {
 .factor-label {
   width: 120px;
   font-size: 13px;
-  color: #333;
+  color: var(--text-secondary);
 }
 .factor-score {
   width: 40px;
   text-align: right;
   font-weight: 600;
   font-size: 13px;
-  color: #999;
+  font-family: 'DM Mono', monospace;
+  color: var(--text-muted);
 }
 .factor-highlight {
-  color: #52c41a;
+  color: var(--green);
 }
 </style>

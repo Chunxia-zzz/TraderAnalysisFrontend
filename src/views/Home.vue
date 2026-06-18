@@ -61,11 +61,11 @@
 .cta-btn {
   display: inline-block;
   padding: 12px 32px;
-  background: #1890ff;
+  background: var(--text);
   color: #ffffff;
   border-radius: 6px;
   text-decoration: none;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   transition: opacity 0.2s;
 }

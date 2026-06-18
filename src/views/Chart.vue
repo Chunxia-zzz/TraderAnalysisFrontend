@@ -183,10 +183,14 @@ onMounted(() => loadWatchlist())
   user-select: none;
   min-width: 48px;
   text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
 }
 .tag-group-label {
-  font-size: 12px;
-  color: #999;
+  font-size: 11px;
+  color: var(--text-muted);
   margin-right: 2px;
+  font-weight: 500;
 }
 </style>
