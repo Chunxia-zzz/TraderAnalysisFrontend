@@ -41,11 +41,6 @@ const routes = [
     name: 'watchlist-manage',
     component: () => import('../views/WatchlistManage.vue'),
   },
-  {
-    path: '/grid-trading',
-    name: 'grid-trading',
-    component: () => import('../views/GridTrading.vue'),
-  },
 ]
 
 const router = createRouter({

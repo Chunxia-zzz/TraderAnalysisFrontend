@@ -44,9 +44,3 @@ export const getTpSl = (code, params) =>
 // ── 信号回测 ──
 export const getBacktestRun = (params) =>
   client.get('/api/backtest/run', { params, timeout: 30000 })
-
-// ── 网格交易 ──
-export const getGridStatus = (configId) =>
-  client.get('/api/grid/status', { params: { config_id: configId } })
-export const getGridOrders = (configId, limit = 50) =>
-  client.get('/api/grid/orders', { params: { config_id: configId, limit } })
