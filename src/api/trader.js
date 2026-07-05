@@ -44,3 +44,7 @@ export const getTpSl = (code, params) =>
 // ── 信号回测 ──
 export const getBacktestRun = (params) =>
   client.get('/api/backtest/run', { params, timeout: 30000 })
+
+// ── 技术分析（支撑/压力位 + 形态 + 趋势）──
+export const getAnalysis = (code, ktype = '1d') =>
+  client.get('/api/analysis', { params: { code, ktype } })

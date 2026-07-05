@@ -17,16 +17,16 @@
           全部 <em>{{ overview.total_count }}</em>
         </span>
         <span class="filter-tab blue" :class="{ active: activeFilter === 'actionable' }" @click="activeFilter = 'actionable'">
-          可执行 <em>{{ overview.summary.actionable_count }}</em>
+          严重超卖且站上MA5 <em>{{ overview.summary.actionable_count }}</em>
         </span>
         <span class="filter-tab green" :class="{ active: activeFilter === 'strong_buy' }" @click="activeFilter = 'strong_buy'">
-          强烈买入 <em>{{ overview.summary.strong_buy_count }}</em>
+          严重超卖 <em>{{ overview.summary.strong_buy_count }}</em>
         </span>
         <span class="filter-tab gold" :class="{ active: activeFilter === 'buy' }" @click="activeFilter = 'buy'">
-          建议买入 <em>{{ overview.summary.buy_count }}</em>
+          超卖 <em>{{ overview.summary.buy_count }}</em>
         </span>
         <span class="filter-tab" :class="{ active: activeFilter === 'no_action' }" @click="activeFilter = 'no_action'">
-          观望 <em>{{ overview.summary.no_action_count }}</em>
+          中性 <em>{{ overview.summary.no_action_count }}</em>
         </span>
       </div>
     </div>
@@ -36,7 +36,7 @@
         <!-- 可执行机会 -->
         <div v-if="overview.actionable && overview.actionable.length > 0 && (activeFilter === 'all' || activeFilter === 'actionable')" class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">可执行机会</span>
+            <span class="section-title">严重超卖且站上MA5</span>
             <span class="section-badge">评分达标 + 站上MA5</span>
           </div>
           <div class="stock-table">
@@ -64,7 +64,7 @@
         <!-- STRONG_BUY -->
         <div v-if="overview.strong_buy.length > 0 && (activeFilter === 'all' || activeFilter === 'strong_buy')" class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">强烈买入</span>
+            <span class="section-title">严重超卖</span>
             <span class="section-badge green">≥ 80</span>
           </div>
           <div class="stock-table">
@@ -105,7 +105,7 @@
         <!-- BUY -->
         <div v-if="overview.buy.length > 0 && (activeFilter === 'all' || activeFilter === 'buy')" class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">建议买入</span>
+            <span class="section-title">超卖</span>
             <span class="section-badge gold">60 ~ 79</span>
           </div>
           <div class="stock-table">
@@ -145,7 +145,7 @@
         <!-- NO_ACTION -->
         <div v-if="activeFilter === 'all' || activeFilter === 'no_action'" class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">观望</span>
+            <span class="section-title">中性</span>
             <span class="section-badge">< 60</span>
           </div>
           <div class="stock-table">
@@ -199,15 +199,11 @@ function scorePillClass(score) {
 }
 
 function ribbonLabel(ribbon) {
-  if (ribbon === 'green') return '多头带'
-  if (ribbon === 'red') return '空头带'
-  return '纠缠中'
+  return ribbon === 'green' ? '多头带' : '空头带'
 }
 
 function ribbonBadgeClass(ribbon) {
-  if (ribbon === 'green') return 'badge-green'
-  if (ribbon === 'red') return 'badge-red'
-  return 'badge-gold'
+  return ribbon === 'green' ? 'badge-green' : 'badge-red'
 }
 
 async function toggleTpSl(item, event) {

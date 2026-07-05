@@ -13,13 +13,79 @@
         />
       </div>
       <div class="toolbar-stats" v-if="overview">
+        <span class="stat-chip">牛熊转换 {{ ribbonFlip.length }} 只</span>
+        <span class="stat-chip green">多头飘带 {{ ribbonBull.length }} 只</span>
         <span class="stat-chip red">主升浪龙头 {{ leaders.length }} 只</span>
-        <span class="stat-chip green">可执行 {{ leaders.filter(i => i.above_ma5).length }} 只</span>
       </div>
     </div>
 
     <a-spin :spinning="loading">
       <template v-if="overview">
+        <!-- 牛熊转换 -->
+        <div v-if="ribbonFlip.length > 0" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">牛熊转换</span>
+            <span class="section-badge">近5日内飘带翻转</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in ribbonFlip"
+              :key="item.code"
+              class="stock-row"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="momentum-bar-wrap">
+                <div class="momentum-bar">
+                  <div class="momentum-fill" :style="{ width: (item.momentum_score ?? 0) + '%' }"></div>
+                </div>
+                <span class="momentum-val mono">{{ item.momentum_score ?? '-' }}</span>
+              </div>
+              <div class="row-badges">
+                <span v-if="item.ribbon_flip === 'to_bull'" class="badge badge-green">↑ 空转多</span>
+                <span v-else class="badge badge-red">↓ 多转空</span>
+                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                <span v-else class="badge badge-gray">MA5下</span>
+              </div>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 多头飘带 -->
+        <div v-if="ribbonBull.length > 0" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">多头飘带</span>
+            <span class="section-badge green">EMA5 &gt; 10 &gt; 15 &gt; 20 &gt; 25 &gt; 30</span>
+          </div>
+          <div class="stock-table">
+            <div
+              v-for="(item, i) in ribbonBull"
+              :key="item.code"
+              class="stock-row"
+              @click="goDetail(item)"
+            >
+              <span class="row-rank mono">{{ i + 1 }}</span>
+              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="row-name">{{ item.name }}</span>
+              <div class="momentum-bar-wrap">
+                <div class="momentum-bar">
+                  <div class="momentum-fill" :style="{ width: (item.momentum_score ?? 0) + '%' }"></div>
+                </div>
+                <span class="momentum-val mono">{{ item.momentum_score ?? '-' }}</span>
+              </div>
+              <div class="row-badges">
+                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                <span v-else class="badge badge-gray">MA5下</span>
+              </div>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 主升浪龙头 -->
         <div v-if="leaders.length > 0" class="card section">
           <div class="section-header">
             <span class="section-title">主升浪龙头</span>
@@ -44,12 +110,13 @@
               <div class="row-badges">
                 <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
                 <span v-else class="badge badge-gray">MA5下</span>
+                <span v-if="item.ema_ribbon === 'green'" class="badge badge-green">多头带</span>
               </div>
               <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
             </div>
           </div>
         </div>
-        <a-empty v-else description="暂无主升浪龙头" />
+        <a-empty v-if="leaders.length === 0 && ribbonBull.length === 0" description="暂无数据" />
       </template>
       <a-empty v-else-if="!loading" :description="emptyMessage" />
     </a-spin>
@@ -73,8 +140,47 @@ const leaders = computed(() => {
   overview.value.actionable?.forEach(a => { actionableMap[a.code] = a.above_ma5 })
   return (overview.value.momentum_leaders || []).map(item => ({
     ...item,
-    above_ma5: actionableMap[item.code] ?? false,
+    above_ma5: actionableMap[item.code] ?? item.above_ma5 ?? false,
   }))
+})
+
+const ribbonFlip = computed(() => {
+  if (!overview.value) return []
+  const all = [
+    ...(overview.value.strong_buy || []),
+    ...(overview.value.buy || []),
+    ...(overview.value.no_action || []),
+  ]
+  const seen = new Set()
+  return all
+    .filter(item => {
+      if (!item.ribbon_flip) return false
+      if (seen.has(item.code)) return false
+      seen.add(item.code)
+      return true
+    })
+    .sort((a, b) => {
+      if (a.ribbon_flip === b.ribbon_flip) return (b.momentum_score ?? 0) - (a.momentum_score ?? 0)
+      return a.ribbon_flip === 'to_bull' ? -1 : 1
+    })
+})
+
+const ribbonBull = computed(() => {
+  if (!overview.value) return []
+  const all = [
+    ...(overview.value.strong_buy || []),
+    ...(overview.value.buy || []),
+    ...(overview.value.no_action || []),
+  ]
+  const seen = new Set()
+  return all
+    .filter(item => {
+      if (item.ema_ribbon !== 'green') return false
+      if (seen.has(item.code)) return false
+      seen.add(item.code)
+      return true
+    })
+    .sort((a, b) => (b.momentum_score ?? 0) - (a.momentum_score ?? 0))
 })
 
 function scorePillClass(score) {
@@ -166,7 +272,8 @@ onMounted(loadData)
   background: var(--bg-hover);
   color: var(--text-muted);
 }
-.section-badge.red { color: var(--red); background: var(--red-bg); }
+.section-badge.red   { color: var(--red);   background: var(--red-bg); }
+.section-badge.green { color: var(--green); background: var(--green-bg); }
 
 .stock-table {
   display: flex;

@@ -9,8 +9,8 @@
           </router-link>
           <nav class="nav-links" style="margin-left: auto">
             <router-link to="/market-temperature" class="nav-item">市场温度</router-link>
-            <router-link to="/scores-overview" class="nav-item">机会速览</router-link>
-            <router-link to="/momentum-leaders" class="nav-item">主升浪龙头</router-link>
+            <router-link to="/scores-overview" class="nav-item">个股超买超卖</router-link>
+            <router-link to="/momentum-leaders" class="nav-item">个股主升趋势</router-link>
             <a-dropdown>
               <span class="nav-item nav-dropdown" :class="{ active: isStockRoute }">个股分析 ▾</span>
               <template #overlay>

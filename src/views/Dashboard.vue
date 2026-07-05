@@ -102,9 +102,112 @@
             <a-descriptions-item label="DIF">{{ fmt(latest.dif) }}</a-descriptions-item>
             <a-descriptions-item label="DEA">{{ fmt(latest.dea) }}</a-descriptions-item>
             <a-descriptions-item label="MACD">{{ fmt(latest.macd) }}</a-descriptions-item>
-            <a-descriptions-item label="RSI14">{{ fmt(latest.rsi14) }}</a-descriptions-item>
+            <a-descriptions-item label="RSI12">{{ fmt(latest.rsi12) }}</a-descriptions-item>
           </a-descriptions>
           <a-empty v-else-if="!indicatorLoading" description="暂无数据" />
+        </a-card>
+      </a-col>
+
+      <!-- 支撑 & 压力位 -->
+      <a-col :xs="24" :md="12">
+        <a-card title="支撑 & 压力位" :loading="analysisLoading">
+          <template v-if="analysis">
+            <!-- 支撑位 -->
+            <div class="sr-group-label support-label">支撑位</div>
+            <template v-if="analysis.supports.length">
+              <div v-for="s in analysis.supports" :key="s.price" class="sr-row">
+                <span class="sr-price support-price mono">{{ fmt(s.price) }}</span>
+                <span class="sr-item-label">{{ s.label }}</span>
+                <span class="sr-dist" :class="s.price < analysis.close ? 'text-down' : 'text-up'">
+                  {{ pctDiff(s.price, analysis.close) }}
+                </span>
+                <span class="sr-strength">{{ strengthDots(s.strength) }}</span>
+              </div>
+            </template>
+            <span v-else class="sr-empty">无有效支撑位</span>
+
+            <a-divider style="margin: 12px 0" />
+
+            <!-- 压力位 -->
+            <div class="sr-group-label resist-label">压力位</div>
+            <template v-if="analysis.resistances.length">
+              <div v-for="r in analysis.resistances" :key="r.price" class="sr-row">
+                <span class="sr-price resist-price mono">{{ fmt(r.price) }}</span>
+                <span class="sr-item-label">{{ r.label }}</span>
+                <span class="sr-dist" :class="r.price > analysis.close ? 'text-up' : 'text-down'">
+                  {{ pctDiff(r.price, analysis.close) }}
+                </span>
+                <span class="sr-strength">{{ strengthDots(r.strength) }}</span>
+              </div>
+            </template>
+            <span v-else class="sr-empty">无有效压力位</span>
+
+            <div class="sr-footer">数据日期：{{ analysis.date }} · 当前价 {{ fmt(analysis.close) }}</div>
+          </template>
+          <a-empty v-else-if="!analysisLoading" description="暂无分析数据" />
+        </a-card>
+      </a-col>
+
+      <!-- 技术形态 & 趋势 -->
+      <a-col :xs="24" :md="12">
+        <a-card title="技术形态 & 趋势" :loading="analysisLoading">
+          <template v-if="analysis">
+            <!-- 形态信号 -->
+            <div class="section-sub-label">形态信号</div>
+            <div v-if="analysis.patterns.length" class="pattern-wrap">
+              <a-tooltip v-for="p in analysis.patterns" :key="p.id" :title="p.desc">
+                <a-tag
+                  :color="p.bullish === true ? 'green' : p.bullish === false ? 'red' : 'default'"
+                  style="margin-bottom: 6px; cursor: default"
+                >
+                  {{ p.label }}
+                </a-tag>
+              </a-tooltip>
+            </div>
+            <span v-else class="sr-empty">无明显形态信号</span>
+
+            <a-divider style="margin: 12px 0" />
+
+            <!-- 趋势数据 -->
+            <div class="section-sub-label">趋势判断</div>
+            <a-descriptions :column="2" size="small">
+              <a-descriptions-item label="主趋势">
+                <span :class="trendColorClass(analysis.trend.primary)">
+                  {{ trendText(analysis.trend.primary) }}
+                </span>
+              </a-descriptions-item>
+              <a-descriptions-item label="短期趋势">
+                <span :class="trendColorClass(analysis.trend.short_term)">
+                  {{ trendText(analysis.trend.short_term) }}
+                </span>
+              </a-descriptions-item>
+              <a-descriptions-item label="RSI12">
+                <span class="mono">{{ analysis.trend.rsi12 ?? '-' }}</span>
+              </a-descriptions-item>
+              <a-descriptions-item label="MACD">
+                <span :class="macdColorClass(analysis.trend.macd_bias)">
+                  {{ macdText(analysis.trend.macd_bias) }}
+                </span>
+              </a-descriptions-item>
+              <a-descriptions-item label="BB位置(%B)">
+                <span class="mono">
+                  {{ analysis.trend.bb_pct_b != null ? (analysis.trend.bb_pct_b * 100).toFixed(1) + '%' : '-' }}
+                </span>
+              </a-descriptions-item>
+              <a-descriptions-item label="成交量比">
+                <span class="mono">{{ analysis.trend.vol_ratio != null ? analysis.trend.vol_ratio + 'x' : '-' }}</span>
+              </a-descriptions-item>
+              <a-descriptions-item label="ATR14">
+                <span class="mono">{{ analysis.trend.atr14 != null ? fmt(analysis.trend.atr14) : '-' }}</span>
+              </a-descriptions-item>
+              <a-descriptions-item label="ATR波动率">
+                <span class="mono">
+                  {{ analysis.trend.atr_pct != null ? (analysis.trend.atr_pct * 100).toFixed(2) + '%' : '-' }}
+                </span>
+              </a-descriptions-item>
+            </a-descriptions>
+          </template>
+          <a-empty v-else-if="!analysisLoading" description="暂无分析数据" />
         </a-card>
       </a-col>
     </a-row>
@@ -116,7 +219,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
-import { getIndicatorsLatest, getScoresLatest, getWatchlist } from '../api/trader'
+import { getAnalysis, getIndicatorsLatest, getScoresLatest, getWatchlist } from '../api/trader'
 
 const route = useRoute()
 
@@ -127,8 +230,10 @@ const watchlistOptions = ref([])
 const latest = ref(null)
 const score = ref(null)
 const scoreMessage = ref('')
+const analysis = ref(null)
 const indicatorLoading = ref(true)
 const scoreLoading = ref(true)
+const analysisLoading = ref(true)
 
 const scoreColor = computed(() => {
   if (!score.value) return 'var(--text-muted)'
@@ -182,21 +287,50 @@ function fmtVol(val) {
   return val.toString()
 }
 
+function pctDiff(price, base) {
+  if (!price || !base) return '-'
+  const pct = ((price - base) / base * 100).toFixed(1)
+  return pct > 0 ? `+${pct}%` : `${pct}%`
+}
+
+function strengthDots(n) {
+  const level = Math.min(Math.ceil(n / 2), 3)
+  return '●'.repeat(level) + '○'.repeat(3 - level)
+}
+
+function trendText(val) {
+  return { up: '↑ 上涨', down: '↓ 下跌', sideways: '→ 震荡' }[val] ?? val ?? '-'
+}
+
+function trendColorClass(val) {
+  return { up: 'text-up', down: 'text-down', sideways: '' }[val] ?? ''
+}
+
+function macdText(val) {
+  return { bullish: '偏多', bearish: '偏空', neutral: '中性' }[val] ?? '-'
+}
+
+function macdColorClass(val) {
+  return { bullish: 'text-up', bearish: 'text-down', neutral: '' }[val] ?? ''
+}
+
 async function loadData() {
   if (!code.value) return
   latest.value = null
   score.value = null
   scoreMessage.value = ''
+  analysis.value = null
   indicatorLoading.value = true
   scoreLoading.value = true
+  analysisLoading.value = true
   const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-  const [indRes, scoreRes] = await Promise.allSettled([
+  const [indRes, scoreRes, analysisRes] = await Promise.allSettled([
     getIndicatorsLatest(code.value),
     getScoresLatest(code.value, dateStr),
+    getAnalysis(code.value),
   ])
   if (indRes.status === 'fulfilled') {
     const d = indRes.value.data
-    // 兼容新格式 {data: null, message} 和旧格式直接返回对象
     latest.value = (d && d.data === null) ? null : d
   }
   if (scoreRes.status === 'fulfilled') {
@@ -208,8 +342,13 @@ async function loadData() {
       score.value = d
     }
   }
+  if (analysisRes.status === 'fulfilled') {
+    const d = analysisRes.value.data
+    analysis.value = (d && d.data === null) ? null : d
+  }
   indicatorLoading.value = false
   scoreLoading.value = false
+  analysisLoading.value = false
 }
 
 onMounted(async () => {
@@ -222,7 +361,6 @@ onMounted(async () => {
       label: `${item.ticker} - ${item.name}`,
       value: item.code,
     }))
-    // 支持从 URL query 传入 code 和 date（如从机会速览页跳转）
     const queryCode = route.query.code
     const queryDate = route.query.date
     if (queryCode && watchlistOptions.value.some(o => o.value === queryCode)) {
@@ -241,6 +379,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ── 评分因子 ── */
 .factor-row {
   display: flex;
   align-items: center;
@@ -262,4 +401,89 @@ onMounted(async () => {
 .factor-highlight {
   color: var(--green);
 }
+
+/* ── 支撑/压力位 ── */
+.sr-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.support-label { color: var(--green); }
+.resist-label  { color: var(--red); }
+
+.sr-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sr-row:last-child { border-bottom: none; }
+
+.sr-price {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 72px;
+}
+.support-price { color: var(--green); }
+.resist-price  { color: var(--red); }
+
+.sr-item-label {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sr-dist {
+  font-size: 12px;
+  font-family: 'DM Mono', monospace;
+  min-width: 54px;
+  text-align: right;
+}
+
+.sr-strength {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  min-width: 32px;
+  text-align: right;
+}
+
+.sr-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.sr-footer {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* ── 形态 & 趋势 ── */
+.section-sub-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.pattern-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+/* ── 通用 ── */
+.mono {
+  font-family: 'DM Mono', monospace;
+}
+.text-up   { color: var(--green); font-weight: 600; }
+.text-down { color: var(--red);   font-weight: 600; }
 </style>
