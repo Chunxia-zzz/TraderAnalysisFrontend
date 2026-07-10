@@ -50,5 +50,7 @@ export const getAnalysis = (code, ktype = '1d') =>
   client.get('/api/analysis', { params: { code, ktype } })
 
 // ── 交易信号（顶/底背离）──
-export const getTradeSignals = (code) =>
-  client.get('/api/trade-signals', { params: { code } })
+export const getTradeSignals = (code, date) =>
+  client.get('/api/trade-signals', { params: { code, ...(date ? { date } : {}) } })
+export const getBottomSignals = (code, days = 7) =>
+  client.get('/api/bottom-signals', { params: { code, days } })

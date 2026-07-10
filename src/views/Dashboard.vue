@@ -380,19 +380,8 @@ function macdColorClass(val) {
   return { bullish: 'text-up', bearish: 'text-down', neutral: '' }[val] ?? ''
 }
 
-async function loadSignals() {
-  if (!code.value) return
-  tradeSignals.value = null
-  signalsLoading.value = true
-  try {
-    const res = await getTradeSignals(code.value)
-    const d = res.data
-    tradeSignals.value = (d && d.data === null) ? null : d
-  } catch {
-    tradeSignals.value = null
-  } finally {
-    signalsLoading.value = false
-  }
+async function handleCodeChange() {
+  loadData()
 }
 
 async function loadData() {
@@ -401,14 +390,17 @@ async function loadData() {
   score.value = null
   scoreMessage.value = ''
   analysis.value = null
+  tradeSignals.value = null
   indicatorLoading.value = true
   scoreLoading.value = true
   analysisLoading.value = true
+  signalsLoading.value = true
   const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-  const [indRes, scoreRes, analysisRes] = await Promise.allSettled([
+  const [indRes, scoreRes, analysisRes, sigRes] = await Promise.allSettled([
     getIndicatorsLatest(code.value),
     getScoresLatest(code.value, dateStr),
     getAnalysis(code.value),
+    getTradeSignals(code.value, dateStr),
   ])
   if (indRes.status === 'fulfilled') {
     const d = indRes.value.data
@@ -427,14 +419,14 @@ async function loadData() {
     const d = analysisRes.value.data
     analysis.value = (d && d.data === null) ? null : d
   }
+  if (sigRes.status === 'fulfilled') {
+    const d = sigRes.value.data
+    tradeSignals.value = (d && d.data === null) ? null : d
+  }
   indicatorLoading.value = false
   scoreLoading.value = false
   analysisLoading.value = false
-}
-
-async function handleCodeChange() {
-  loadData()
-  loadSignals()
+  signalsLoading.value = false
 }
 
 onMounted(async () => {
@@ -456,7 +448,6 @@ onMounted(async () => {
       code.value = watchlistOptions.value[0].value
     }
     loadData()
-    loadSignals()
   } catch {
     message.error('获取标的列表失败')
   } finally {
