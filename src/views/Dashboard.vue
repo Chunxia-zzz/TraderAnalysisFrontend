@@ -11,7 +11,7 @@
           show-search
           :loading="watchlistLoading"
           :options="watchlistOptions"
-          @change="loadData"
+          @change="handleCodeChange"
         />
         <span style="color: #666">日期</span>
         <a-date-picker
@@ -380,23 +380,35 @@ function macdColorClass(val) {
   return { bullish: 'text-up', bearish: 'text-down', neutral: '' }[val] ?? ''
 }
 
+async function loadSignals() {
+  if (!code.value) return
+  tradeSignals.value = null
+  signalsLoading.value = true
+  try {
+    const res = await getTradeSignals(code.value)
+    const d = res.data
+    tradeSignals.value = (d && d.data === null) ? null : d
+  } catch {
+    tradeSignals.value = null
+  } finally {
+    signalsLoading.value = false
+  }
+}
+
 async function loadData() {
   if (!code.value) return
   latest.value = null
   score.value = null
   scoreMessage.value = ''
   analysis.value = null
-  tradeSignals.value = null
   indicatorLoading.value = true
   scoreLoading.value = true
   analysisLoading.value = true
-  signalsLoading.value = true
   const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-  const [indRes, scoreRes, analysisRes, signalsRes] = await Promise.allSettled([
+  const [indRes, scoreRes, analysisRes] = await Promise.allSettled([
     getIndicatorsLatest(code.value),
     getScoresLatest(code.value, dateStr),
     getAnalysis(code.value),
-    getTradeSignals(code.value),
   ])
   if (indRes.status === 'fulfilled') {
     const d = indRes.value.data
@@ -415,14 +427,14 @@ async function loadData() {
     const d = analysisRes.value.data
     analysis.value = (d && d.data === null) ? null : d
   }
-  if (signalsRes.status === 'fulfilled') {
-    const d = signalsRes.value.data
-    tradeSignals.value = (d && d.data === null) ? null : d
-  }
   indicatorLoading.value = false
   scoreLoading.value = false
   analysisLoading.value = false
-  signalsLoading.value = false
+}
+
+async function handleCodeChange() {
+  loadData()
+  loadSignals()
 }
 
 onMounted(async () => {
@@ -444,6 +456,7 @@ onMounted(async () => {
       code.value = watchlistOptions.value[0].value
     }
     loadData()
+    loadSignals()
   } catch {
     message.error('获取标的列表失败')
   } finally {
