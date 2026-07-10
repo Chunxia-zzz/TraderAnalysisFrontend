@@ -108,6 +108,70 @@
         </a-card>
       </a-col>
 
+      <!-- 交易信号 -->
+      <a-col :span="24">
+        <a-card title="交易信号" :loading="signalsLoading">
+          <template v-if="tradeSignals">
+            <div class="signals-meta">
+              数据日期：{{ tradeSignals.date }}
+              <span v-if="tradeSignals.top_triggered_count > 0" class="sig-badge badge-sell">
+                顶部预警 {{ tradeSignals.top_triggered_count }}
+              </span>
+              <span v-if="tradeSignals.bottom_triggered_count > 0" class="sig-badge badge-buy">
+                底部买入 {{ tradeSignals.bottom_triggered_count }}
+              </span>
+            </div>
+            <a-row :gutter="16" style="margin-top: 12px">
+              <!-- 左栏：顶部预警 -->
+              <a-col :xs="24" :md="12">
+                <div class="signals-col-label sell-label">顶部预警（卖出侧）</div>
+                <div
+                  v-for="sig in tradeSignals.top_signals"
+                  :key="sig.signal_type"
+                  class="signal-row"
+                  :class="sig.triggered ? 'signal-triggered-sell' : 'signal-inactive'"
+                >
+                  <span class="signal-dot" :class="sig.triggered ? 'dot-sell' : 'dot-off'">●</span>
+                  <span class="signal-name">{{ sig.label }}</span>
+                  <template v-if="sig.triggered">
+                    <div class="signal-strength-bar">
+                      <div class="strength-fill fill-sell" :style="{ width: (sig.strength * 100) + '%' }" />
+                    </div>
+                    <a-tooltip :title="sig.description">
+                      <span class="signal-action action-sell">{{ sig.action }}</span>
+                    </a-tooltip>
+                  </template>
+                  <span v-else class="signal-untriggered">未触发</span>
+                </div>
+              </a-col>
+              <!-- 右栏：底部买入 -->
+              <a-col :xs="24" :md="12">
+                <div class="signals-col-label buy-label">底部买入（买入侧）</div>
+                <div
+                  v-for="sig in tradeSignals.bottom_signals"
+                  :key="sig.signal_type"
+                  class="signal-row"
+                  :class="sig.triggered ? 'signal-triggered-buy' : 'signal-inactive'"
+                >
+                  <span class="signal-dot" :class="sig.triggered ? 'dot-buy' : 'dot-off'">●</span>
+                  <span class="signal-name">{{ sig.label }}</span>
+                  <template v-if="sig.triggered">
+                    <div class="signal-strength-bar">
+                      <div class="strength-fill fill-buy" :style="{ width: (sig.strength * 100) + '%' }" />
+                    </div>
+                    <a-tooltip :title="sig.description">
+                      <span class="signal-action action-buy">{{ sig.action }}</span>
+                    </a-tooltip>
+                  </template>
+                  <span v-else class="signal-untriggered">未触发</span>
+                </div>
+              </a-col>
+            </a-row>
+          </template>
+          <a-empty v-else-if="!signalsLoading" description="暂无信号数据" />
+        </a-card>
+      </a-col>
+
       <!-- 支撑 & 压力位 -->
       <a-col :xs="24" :md="12">
         <a-card title="支撑 & 压力位" :loading="analysisLoading">
@@ -219,7 +283,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
-import { getAnalysis, getIndicatorsLatest, getScoresLatest, getWatchlist } from '../api/trader'
+import { getAnalysis, getIndicatorsLatest, getScoresLatest, getTradeSignals, getWatchlist } from '../api/trader'
 
 const route = useRoute()
 
@@ -231,9 +295,11 @@ const latest = ref(null)
 const score = ref(null)
 const scoreMessage = ref('')
 const analysis = ref(null)
+const tradeSignals = ref(null)
 const indicatorLoading = ref(true)
 const scoreLoading = ref(true)
 const analysisLoading = ref(true)
+const signalsLoading = ref(true)
 
 const scoreColor = computed(() => {
   if (!score.value) return 'var(--text-muted)'
@@ -320,14 +386,17 @@ async function loadData() {
   score.value = null
   scoreMessage.value = ''
   analysis.value = null
+  tradeSignals.value = null
   indicatorLoading.value = true
   scoreLoading.value = true
   analysisLoading.value = true
+  signalsLoading.value = true
   const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-  const [indRes, scoreRes, analysisRes] = await Promise.allSettled([
+  const [indRes, scoreRes, analysisRes, signalsRes] = await Promise.allSettled([
     getIndicatorsLatest(code.value),
     getScoresLatest(code.value, dateStr),
     getAnalysis(code.value),
+    getTradeSignals(code.value),
   ])
   if (indRes.status === 'fulfilled') {
     const d = indRes.value.data
@@ -346,9 +415,14 @@ async function loadData() {
     const d = analysisRes.value.data
     analysis.value = (d && d.data === null) ? null : d
   }
+  if (signalsRes.status === 'fulfilled') {
+    const d = signalsRes.value.data
+    tradeSignals.value = (d && d.data === null) ? null : d
+  }
   indicatorLoading.value = false
   scoreLoading.value = false
   analysisLoading.value = false
+  signalsLoading.value = false
 }
 
 onMounted(async () => {
@@ -486,4 +560,104 @@ onMounted(async () => {
 }
 .text-up   { color: var(--green); font-weight: 600; }
 .text-down { color: var(--red);   font-weight: 600; }
+
+/* ── 交易信号 ── */
+.signals-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sig-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-sell { background: rgba(255, 77, 79, 0.12); color: var(--red); }
+.badge-buy  { background: rgba(82, 196, 26, 0.12);  color: var(--green); }
+
+.signals-col-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.sell-label { color: var(--red); }
+.buy-label  { color: var(--green); }
+
+.signal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  transition: background 0.15s;
+}
+
+.signal-triggered-sell {
+  background: rgba(255, 77, 79, 0.07);
+  border-left: 3px solid var(--red);
+}
+.signal-triggered-buy {
+  background: rgba(82, 196, 26, 0.07);
+  border-left: 3px solid var(--green);
+}
+.signal-inactive {
+  opacity: 0.45;
+  border-left: 3px solid transparent;
+}
+
+.signal-dot {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.dot-sell { color: var(--red); }
+.dot-buy  { color: var(--green); }
+.dot-off  { color: var(--text-muted); }
+
+.signal-name {
+  font-size: 13px;
+  min-width: 100px;
+  font-weight: 500;
+}
+
+.signal-strength-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 40px;
+}
+.strength-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.fill-sell { background: var(--red); }
+.fill-buy  { background: var(--green); }
+
+.signal-action {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: default;
+  min-width: 80px;
+  text-align: right;
+}
+.action-sell { color: var(--red); }
+.action-buy  { color: var(--green); }
+
+.signal-untriggered {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
 </style>
