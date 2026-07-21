@@ -9,13 +9,47 @@
           placeholder="最新"
           :allow-clear="true"
           style="width: 140px"
-          @change="loadData"
         />
+        <a-button type="primary" size="small" @click="loadData" :loading="loading">查询</a-button>
       </div>
       <div class="toolbar-stats" v-if="overview">
         <span class="stat-chip">牛熊转换 {{ ribbonFlip.length }} 只</span>
         <span class="stat-chip green">多头飘带 {{ ribbonBull.length }} 只</span>
         <span class="stat-chip red">主升浪龙头 {{ leaders.length }} 只</span>
+      </div>
+    </div>
+
+    <!-- EMA 交叉信号 -->
+    <div v-if="emaCross" class="card section" style="margin-bottom: 16px">
+      <div class="section-header">
+        <span class="section-title">EMA 交叉信号</span>
+        <div class="ema-tabs">
+          <span class="ema-tab" :class="{ active: emaTab === '4h' }" @click="emaTab = '4h'">
+            4H <em v-if="emaCross">{{ (emaCross.bull_4h?.length || 0) + (emaCross.bear_4h?.length || 0) }}</em>
+          </span>
+          <span class="ema-tab" :class="{ active: emaTab === '1d' }" @click="emaTab = '1d'">
+            日线 <em v-if="emaCross">{{ (emaCross.bull_1d?.length || 0) + (emaCross.bear_1d?.length || 0) }}</em>
+          </span>
+        </div>
+      </div>
+      <div class="stock-table">
+        <div
+          v-for="(item, i) in emaCrossFiltered"
+          :key="item.code + item.signal_type"
+          class="stock-row"
+          @click="goDetail(item)"
+        >
+          <span class="row-rank mono">{{ i + 1 }}</span>
+          <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+          <span class="row-name">{{ item.detail?.close ? '$' + item.detail.close : '' }}</span>
+          <div class="row-badges">
+            <span v-if="item.signal_type.includes('BULL')" class="badge badge-green">↑ 空转多</span>
+            <span v-else class="badge badge-red">↓ 多转空</span>
+            <span class="badge badge-gray">{{ emaTab === '4h' ? '4H' : '日线' }}</span>
+          </div>
+          <span class="ema-detail mono">EMA5={{ item.detail?.ema5 }} / EMA30={{ item.detail?.ema30 }}</span>
+        </div>
+        <a-empty v-if="emaCrossFiltered.length === 0" description="暂无交叉信号" :image="null" style="padding: 16px 0" />
       </div>
     </div>
 
@@ -126,13 +160,15 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getScoresOverview } from '../api/trader'
+import { getScoresOverview, getEmaCrossSignals } from '../api/trader'
 
 const router = useRouter()
 const selectedDate = ref(null)
 const loading = ref(true)
 const overview = ref(null)
 const emptyMessage = ref('暂无数据')
+const emaCross = ref(null)
+const emaTab = ref('4h')
 
 const leaders = computed(() => {
   if (!overview.value) return []
@@ -183,6 +219,14 @@ const ribbonBull = computed(() => {
     .sort((a, b) => (b.momentum_score ?? 0) - (a.momentum_score ?? 0))
 })
 
+const emaCrossFiltered = computed(() => {
+  if (!emaCross.value) return []
+  const tf = emaTab.value
+  const bull = emaCross.value[`bull_${tf}`] || []
+  const bear = emaCross.value[`bear_${tf}`] || []
+  return [...bull, ...bear]
+})
+
 function scorePillClass(score) {
   if (score >= 80) return 'score-pill high'
   if (score >= 60) return 'score-pill mid'
@@ -194,13 +238,17 @@ async function loadData() {
   overview.value = null
   try {
     const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-    const res = await getScoresOverview(dateStr)
-    const d = res.data
+    const [overviewRes, emaRes] = await Promise.all([
+      getScoresOverview(dateStr),
+      getEmaCrossSignals(dateStr),
+    ])
+    const d = overviewRes.data
     if (d && d.data === null) {
       emptyMessage.value = d.message || '暂无数据'
     } else {
       overview.value = d
     }
+    emaCross.value = emaRes.data
   } catch {
     emptyMessage.value = '获取数据失败'
   } finally {
@@ -356,5 +404,37 @@ onMounted(loadData)
   white-space: nowrap;
 }
 .badge-green { color: var(--green);     background: var(--green-bg); }
+.badge-red   { color: var(--red);       background: var(--red-bg); }
 .badge-gray  { color: var(--text-muted); background: var(--bg-hover); }
+
+.ema-tabs {
+  display: flex;
+  gap: 4px;
+}
+.ema-tab {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  transition: all 0.15s;
+}
+.ema-tab:hover { color: var(--text); }
+.ema-tab.active {
+  color: var(--blue);
+  background: var(--blue-bg, rgba(59, 130, 246, 0.1));
+  font-weight: 600;
+}
+.ema-tab em {
+  font-style: normal;
+  margin-left: 3px;
+  opacity: 0.7;
+}
+.ema-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 </style>

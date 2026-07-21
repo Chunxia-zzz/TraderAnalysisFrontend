@@ -25,7 +25,7 @@
         :data-source="list"
         :loading="loading"
         row-key="code"
-        :pagination="false"
+        :pagination="{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'], showTotal: (total) => `共 ${total} 只` }"
         size="small"
         :scroll="{ x: 900 }"
       >

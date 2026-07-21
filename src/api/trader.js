@@ -30,6 +30,10 @@ export const getScoresLatest = (code, date) =>
 export const getScoresOverview = (date) =>
   client.get('/api/scores/overview', { params: { ...(date ? { date } : {}) } })
 
+// ── EMA 交叉信号 ──
+export const getEmaCrossSignals = (date) =>
+  client.get('/api/ema-cross-signals', { params: { ...(date ? { date } : {}) } })
+
 // ── 市场温度 ──
 export const getMarketTemperature = () => client.get('/api/market-temperature')
 export const getMarketTemperatureHistory = (days = 30) =>
