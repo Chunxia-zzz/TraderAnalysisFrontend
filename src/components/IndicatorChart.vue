@@ -279,7 +279,31 @@ function buildChart() {
       horzLine: { color: '#8b949e', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1f2328' },
     },
     rightPriceScale: { borderColor: '#e8ecf0', textColor: '#8b949e' },
-    timeScale: { borderColor: '#e8ecf0', timeVisible: true },
+    timeScale: {
+      borderColor: '#e8ecf0',
+      timeVisible: true,
+      tickMarkFormatter: (time) => {
+        if (typeof time === 'number') {
+          // 4H 数据 - Unix 时间戳
+          const d = new Date(time * 1000)
+          const pad = (n) => String(n).padStart(2, '0')
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+        }
+        // 日线/周线 - 字符串日期
+        return time
+      },
+    },
+    localization: {
+      locale: 'zh-CN',
+      timeFormatter: (time) => {
+        if (typeof time === 'number') {
+          const d = new Date(time * 1000)
+          const pad = (n) => String(n).padStart(2, '0')
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+        }
+        return time
+      },
+    },
   })
 
   // ── 蜡烛图 ──
