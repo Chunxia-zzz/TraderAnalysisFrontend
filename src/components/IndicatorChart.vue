@@ -279,7 +279,7 @@ function buildChart() {
       horzLine: { color: '#8b949e', width: 1, style: LineStyle.Dashed, labelBackgroundColor: '#1f2328' },
     },
     rightPriceScale: { borderColor: '#e8ecf0', textColor: '#8b949e' },
-    timeScale: { borderColor: '#e8ecf0', timeVisible: false },
+    timeScale: { borderColor: '#e8ecf0', timeVisible: true },
   })
 
   // ── 蜡烛图 ──

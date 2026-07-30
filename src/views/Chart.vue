@@ -13,6 +13,7 @@
         />
         <a-select v-model:value="ktype" style="width: 120px">
           <a-select-option value="1d">日K</a-select-option>
+          <a-select-option value="4h">4H K线</a-select-option>
           <a-select-option value="1w">周K</a-select-option>
         </a-select>
         <a-input-number
