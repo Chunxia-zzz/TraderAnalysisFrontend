@@ -14,7 +14,6 @@
       </div>
       <div class="toolbar-stats" v-if="overview">
         <span class="stat-chip">牛熊转换 {{ ribbonFlip.length }} 只</span>
-        <span class="stat-chip green">多头飘带 {{ ribbonBull.length }} 只</span>
         <span class="stat-chip red">主升浪龙头 {{ leaders.length }} 只</span>
       </div>
     </div>
@@ -53,17 +52,33 @@
       </div>
     </div>
 
+    <!-- 主 tab 选择器 -->
+    <div class="card section-selector" style="margin-bottom: 16px">
+      <a-select v-model:value="mainTab" style="width: 200px">
+        <a-select-option value="flip">牛熊转换</a-select-option>
+        <a-select-option value="leaders">主升浪龙头</a-select-option>
+      </a-select>
+    </div>
+
     <a-spin :spinning="loading">
-      <template v-if="overview">
-        <!-- 牛熊转换 -->
-        <div v-if="ribbonFlip.length > 0" class="card section" style="margin-bottom: 16px">
+      <!-- 牛熊转换 -->
+      <template v-if="overview && mainTab === 'flip'">
+        <!-- 空转多 / 多转空 子 tab -->
+        <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
             <span class="section-title">牛熊转换</span>
-            <span class="section-badge">近5日内飘带翻转</span>
+            <div class="ema-tabs">
+              <span class="ema-tab" :class="{ active: flipSubTab === 'to_bull' }" @click="flipSubTab = 'to_bull'">
+                空转多 <em>{{ ribbonFlipToBull.length }}</em>
+              </span>
+              <span class="ema-tab" :class="{ active: flipSubTab === 'to_bear' }" @click="flipSubTab = 'to_bear'">
+                多转空 <em>{{ ribbonFlipToBear.length }}</em>
+              </span>
+            </div>
           </div>
           <div class="stock-table">
             <div
-              v-for="(item, i) in ribbonFlip"
+              v-for="(item, i) in flipFiltered"
               :key="item.code"
               class="stock-row"
               @click="goDetail(item)"
@@ -85,42 +100,14 @@
               </div>
               <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
             </div>
+            <a-empty v-if="flipFiltered.length === 0" description="暂无数据" :image="null" style="padding: 16px 0" />
           </div>
         </div>
+      </template>
 
-        <!-- 多头飘带 -->
-        <div v-if="ribbonBull.length > 0" class="card section" style="margin-bottom: 16px">
-          <div class="section-header">
-            <span class="section-title">多头飘带</span>
-            <span class="section-badge green">EMA5 &gt; 10 &gt; 15 &gt; 20 &gt; 25 &gt; 30</span>
-          </div>
-          <div class="stock-table">
-            <div
-              v-for="(item, i) in ribbonBull"
-              :key="item.code"
-              class="stock-row"
-              @click="goDetail(item)"
-            >
-              <span class="row-rank mono">{{ i + 1 }}</span>
-              <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
-              <span class="row-name">{{ item.name }}</span>
-              <div class="momentum-bar-wrap">
-                <div class="momentum-bar">
-                  <div class="momentum-fill" :style="{ width: (item.momentum_score ?? 0) + '%' }"></div>
-                </div>
-                <span class="momentum-val mono">{{ item.momentum_score ?? '-' }}</span>
-              </div>
-              <div class="row-badges">
-                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
-                <span v-else class="badge badge-gray">MA5下</span>
-              </div>
-              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 主升浪龙头 -->
-        <div v-if="leaders.length > 0" class="card section">
+      <!-- 主升浪龙头 -->
+      <template v-if="overview && mainTab === 'leaders'">
+        <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
             <span class="section-title">主升浪龙头</span>
             <span class="section-badge red">动量评分 ≥ 70</span>
@@ -148,11 +135,12 @@
               </div>
               <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
             </div>
+            <a-empty v-if="leaders.length === 0" description="暂无数据" :image="null" style="padding: 16px 0" />
           </div>
         </div>
-        <a-empty v-if="leaders.length === 0 && ribbonBull.length === 0" description="暂无数据" />
       </template>
-      <a-empty v-else-if="!loading" :description="emptyMessage" />
+
+      <a-empty v-else-if="!loading && !overview" :description="emptyMessage" />
     </a-spin>
   </div>
 </template>
@@ -169,6 +157,8 @@ const overview = ref(null)
 const emptyMessage = ref('暂无数据')
 const emaCross = ref(null)
 const emaTab = ref('4h')
+const mainTab = ref('flip')
+const flipSubTab = ref('to_bull')
 
 const leaders = computed(() => {
   if (!overview.value) return []
@@ -201,22 +191,11 @@ const ribbonFlip = computed(() => {
     })
 })
 
-const ribbonBull = computed(() => {
-  if (!overview.value) return []
-  const all = [
-    ...(overview.value.strong_buy || []),
-    ...(overview.value.buy || []),
-    ...(overview.value.no_action || []),
-  ]
-  const seen = new Set()
-  return all
-    .filter(item => {
-      if (item.ema_ribbon !== 'green') return false
-      if (seen.has(item.code)) return false
-      seen.add(item.code)
-      return true
-    })
-    .sort((a, b) => (b.momentum_score ?? 0) - (a.momentum_score ?? 0))
+const ribbonFlipToBull = computed(() => ribbonFlip.value.filter(item => item.ribbon_flip === 'to_bull'))
+const ribbonFlipToBear = computed(() => ribbonFlip.value.filter(item => item.ribbon_flip === 'to_bear'))
+
+const flipFiltered = computed(() => {
+  return flipSubTab.value === 'to_bull' ? ribbonFlipToBull.value : ribbonFlipToBear.value
 })
 
 const emaCrossFiltered = computed(() => {
@@ -295,6 +274,10 @@ onMounted(loadData)
 }
 .stat-chip.red   { color: var(--red);   background: var(--red-bg); }
 .stat-chip.green { color: var(--green); background: var(--green-bg); }
+
+.section-selector {
+  padding: 12px 16px;
+}
 
 .section {
   padding: 0;
@@ -437,4 +420,14 @@ onMounted(loadData)
   color: var(--text-muted);
   white-space: nowrap;
 }
+.score-pill {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.score-pill.high { color: var(--red);     background: var(--red-bg); }
+.score-pill.mid  { color: var(--orange);  background: var(--orange-bg, rgba(255,159,28,0.15)); }
+.score-pill.low  { color: var(--green);   background: var(--green-bg); }
 </style>
