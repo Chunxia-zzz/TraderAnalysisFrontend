@@ -27,9 +27,10 @@
     </div>
 
     <a-spin :spinning="loading">
-      <!-- 牛熊转换 = EMA 交叉信号（精确检测） -->
-      <template v-if="emaCross && mainTab === 'flip'">
-        <div class="card section" style="margin-bottom: 16px">
+      <div>
+        <template v-if="emaCross && mainTab === 'flip'">
+          <!-- 牛熊转换 = EMA 交叉信号（精确检测） -->
+          <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
             <span class="section-title">EMA 交叉信号</span>
             <!-- 第一层：周期 tab -->
@@ -74,7 +75,7 @@
       </template>
 
       <!-- 主升浪龙头 -->
-      <template v-if="overview && mainTab === 'leaders'">
+      <template v-else-if="overview && mainTab === 'leaders'">
         <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
             <span class="section-title">主升浪龙头</span>
@@ -108,7 +109,8 @@
         </div>
       </template>
 
-      <a-empty v-else-if="!loading && !overview && !emaCross" :description="emptyMessage" />
+      <a-empty v-else-if="!loading && !emaCross" :description="emptyMessage" />
+      </div>
     </a-spin>
   </div>
 </template>
