@@ -12,49 +12,43 @@
         />
         <a-button type="primary" size="small" @click="loadData" :loading="loading">查询</a-button>
       </div>
-      <div class="toolbar-stats" v-if="emaCross">
-        <span class="stat-chip">牛熊转换 {{ totalCrossCount }} 只</span>
+      <div class="toolbar-stats" v-if="emaCross || overview">
+        <span class="stat-chip green">空转多 {{ bullCount }} 只</span>
+        <span class="stat-chip red">多转空 {{ bearCount }} 只</span>
         <span class="stat-chip red">主升浪龙头 {{ leaders.length }} 只</span>
+        <span class="stat-chip green" v-if="oversold.length">主跌浪超卖 {{ oversold.length }} 只</span>
       </div>
     </div>
 
     <!-- 主 tab 选择器 -->
     <div class="card section-selector" style="margin-bottom: 16px">
       <a-select v-model:value="mainTab" style="width: 200px">
-        <a-select-option value="flip">牛熊转换</a-select-option>
+        <a-select-option value="bull">空转多</a-select-option>
+        <a-select-option value="bear">多转空</a-select-option>
         <a-select-option value="leaders">主升浪龙头</a-select-option>
+        <a-select-option value="oversold">主跌浪超卖</a-select-option>
       </a-select>
     </div>
 
     <a-spin :spinning="loading">
       <div>
-        <template v-if="emaCross && mainTab === 'flip'">
-          <!-- 牛熊转换 = EMA 交叉信号（精确检测） -->
+        <!-- 空转多 -->
+        <template v-if="emaCross && mainTab === 'bull'">
           <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">EMA 交叉信号</span>
-            <!-- 第一层：周期 tab -->
-            <div class="ema-tabs" style="margin-right: 8px">
+            <span class="section-title">空转多 — EMA5 上穿 EMA30</span>
+            <div class="ema-tabs">
               <span class="ema-tab" :class="{ active: emaTab === '4h' }" @click="emaTab = '4h'">
-                4H <em>{{ (emaCross.bull_4h?.length || 0) + (emaCross.bear_4h?.length || 0) }}</em>
+                4H <em>{{ (emaCross.bull_4h?.length || 0) }}</em>
               </span>
               <span class="ema-tab" :class="{ active: emaTab === '1d' }" @click="emaTab = '1d'">
-                日线 <em>{{ (emaCross.bull_1d?.length || 0) + (emaCross.bear_1d?.length || 0) }}</em>
-              </span>
-            </div>
-            <!-- 第二层：方向 tab -->
-            <div class="ema-tabs">
-              <span class="ema-tab" :class="{ active: directionTab === 'bull' }" @click="directionTab = 'bull'">
-                空转多 <em>{{ (emaCross?.[`bull_${emaTab}`] || []).length }}</em>
-              </span>
-              <span class="ema-tab" :class="{ active: directionTab === 'bear' }" @click="directionTab = 'bear'">
-                多转空 <em>{{ (emaCross?.[`bear_${emaTab}`] || []).length }}</em>
+                日线 <em>{{ (emaCross.bull_1d?.length || 0) }}</em>
               </span>
             </div>
           </div>
           <div class="stock-table">
             <div
-              v-for="(item, i) in crossFiltered"
+              v-for="(item, i) in bullFiltered"
               :key="item.code + item.signal_type"
               class="stock-row"
               @click="goDetail(item)"
@@ -63,53 +57,122 @@
               <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
               <span class="row-name">{{ item.detail?.close ? '$' + item.detail.close : '' }}</span>
               <div class="row-badges">
-                <span v-if="item.signal_type.includes('BULL')" class="badge badge-green">↑ 空转多</span>
-                <span v-else class="badge badge-red">↓ 多转空</span>
+                <span class="badge badge-green">↑ 空转多</span>
                 <span class="badge badge-gray">{{ emaTab === '4h' ? '4H' : '日线' }}</span>
               </div>
               <span class="ema-detail mono">EMA5={{ item.detail?.ema5 }} / EMA30={{ item.detail?.ema30 }}</span>
             </div>
-            <a-empty v-if="crossFiltered.length === 0" description="暂无交叉信号" :image="null" style="padding: 16px 0" />
+            <a-empty v-if="bullFiltered.length === 0" description="暂无空转多信号" style="padding: 16px 0" />
           </div>
         </div>
-      </template>
+        </template>
 
-      <!-- 主升浪龙头 -->
-      <template v-else-if="overview && mainTab === 'leaders'">
-        <div class="card section" style="margin-bottom: 16px">
+        <!-- 多转空 -->
+        <template v-else-if="emaCross && mainTab === 'bear'">
+          <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">主升浪龙头</span>
-            <span class="section-badge red">动量评分 ≥ 70</span>
+            <span class="section-title">多转空 — EMA5 下穿 EMA30</span>
+            <div class="ema-tabs">
+              <span class="ema-tab" :class="{ active: emaTab === '4h' }" @click="emaTab = '4h'">
+                4H <em>{{ (emaCross.bear_4h?.length || 0) }}</em>
+              </span>
+              <span class="ema-tab" :class="{ active: emaTab === '1d' }" @click="emaTab = '1d'">
+                日线 <em>{{ (emaCross.bear_1d?.length || 0) }}</em>
+              </span>
+            </div>
           </div>
           <div class="stock-table">
             <div
-              v-for="(item, i) in leaders"
-              :key="item.code"
+              v-for="(item, i) in bearFiltered"
+              :key="item.code + item.signal_type"
               class="stock-row"
               @click="goDetail(item)"
             >
               <span class="row-rank mono">{{ i + 1 }}</span>
               <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
-              <span class="row-name">{{ item.name }}</span>
-              <div class="momentum-bar-wrap">
-                <div class="momentum-bar">
-                  <div class="momentum-fill" :style="{ width: item.momentum_score + '%' }"></div>
-                </div>
-                <span class="momentum-val mono">{{ item.momentum_score }}</span>
-              </div>
+              <span class="row-name">{{ item.detail?.close ? '$' + item.detail.close : '' }}</span>
               <div class="row-badges">
-                <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
-                <span v-else class="badge badge-gray">MA5下</span>
-                <span v-if="item.ema_ribbon === 'green'" class="badge badge-green">多头带</span>
+                <span class="badge badge-red">↓ 多转空</span>
+                <span class="badge badge-gray">{{ emaTab === '4h' ? '4H' : '日线' }}</span>
               </div>
-              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+              <span class="ema-detail mono">EMA5={{ item.detail?.ema5 }} / EMA30={{ item.detail?.ema30 }}</span>
             </div>
-            <a-empty v-if="leaders.length === 0" description="暂无数据" :image="null" style="padding: 16px 0" />
+            <a-empty v-if="bearFiltered.length === 0" description="暂无多转空信号" style="padding: 16px 0" />
           </div>
         </div>
-      </template>
+        </template>
 
-      <a-empty v-else-if="!loading && !emaCross" :description="emptyMessage" />
+        <!-- 主升浪龙头 -->
+        <template v-else-if="overview && mainTab === 'leaders'">
+          <div class="card section" style="margin-bottom: 16px">
+            <div class="section-header">
+              <span class="section-title">主升浪龙头</span>
+              <span class="section-badge red">动量评分 ≥ 70</span>
+            </div>
+            <div class="stock-table">
+              <div
+                v-for="(item, i) in leaders"
+                :key="item.code"
+                class="stock-row"
+                @click="goDetail(item)"
+              >
+                <span class="row-rank mono">{{ i + 1 }}</span>
+                <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+                <span class="row-name">{{ item.name }}</span>
+                <div class="momentum-bar-wrap">
+                  <div class="momentum-bar">
+                    <div class="momentum-fill" :style="{ width: item.momentum_score + '%' }"></div>
+                  </div>
+                  <span class="momentum-val mono">{{ item.momentum_score }}</span>
+                </div>
+                <div class="row-badges">
+                  <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                  <span v-else class="badge badge-gray">MA5下</span>
+                  <span v-if="item.ema_ribbon === 'green'" class="badge badge-green">多头带</span>
+                </div>
+                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+              </div>
+              <a-empty v-if="leaders.length === 0" description="暂无数据" style="padding: 16px 0" />
+            </div>
+          </div>
+        </template>
+
+        <!-- 主跌浪超卖 -->
+        <template v-else-if="overview && mainTab === 'oversold'">
+          <div class="card section" style="margin-bottom: 16px">
+            <div class="section-header">
+              <span class="section-title">主跌浪超卖</span>
+              <span class="section-badge green">6因子评分 ≥ 60</span>
+            </div>
+            <div class="stock-table">
+              <div
+                v-for="(item, i) in oversold"
+                :key="item.code"
+                class="stock-row"
+                @click="goDetail(item)"
+              >
+                <span class="row-rank mono">{{ i + 1 }}</span>
+                <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+                <span class="row-name">{{ item.name }}</span>
+                <div class="momentum-bar-wrap">
+                  <div class="momentum-bar">
+                    <div class="momentum-fill" :style="{ width: (item.momentum_score ?? 0) + '%' }"></div>
+                  </div>
+                  <span class="momentum-val mono">{{ item.momentum_score ?? '-' }}</span>
+                </div>
+                <div class="row-badges">
+                  <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
+                  <span v-else class="badge badge-gray">MA5下</span>
+                  <span v-if="item.ema_ribbon === 'red'" class="badge badge-red">空头带</span>
+                </div>
+                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+              </div>
+              <a-empty v-if="oversold.length === 0" description="暂无超卖标的" style="padding: 16px 0" />
+            </div>
+          </div>
+        </template>
+
+        <a-empty v-else-if="!loading && !emaCross && !overview" :description="emptyMessage" />
       </div>
     </a-spin>
   </div>
@@ -126,10 +189,10 @@ const loading = ref(true)
 const overview = ref(null)
 const emptyMessage = ref('暂无数据')
 const emaCross = ref(null)
-const mainTab = ref('flip')
+const mainTab = ref('bull')
 const emaTab = ref('4h')
-const directionTab = ref('bull')
 
+/** 主升浪龙头：动量评分 ≥ 70 */
 const leaders = computed(() => {
   if (!overview.value) return []
   const actionableMap = {}
@@ -140,20 +203,43 @@ const leaders = computed(() => {
   }))
 })
 
-/** 按周期+方向过滤的 EMA 交叉信号 */
-const crossFiltered = computed(() => {
-  if (!emaCross.value) return []
-  return emaCross.value[`${directionTab.value}_${emaTab.value}`] || []
+/** 主跌浪超卖：6因子评分 ≥ 60（STRONG_BUY + BUY），按评分降序 */
+const oversold = computed(() => {
+  if (!overview.value) return []
+  const seen = new Set()
+  const items = [
+    ...(overview.value.strong_buy || []),
+    ...(overview.value.buy || []),
+  ].filter(item => {
+    if (seen.has(item.code)) return false
+    seen.add(item.code)
+    return true
+  })
+  return items.sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
 })
 
-/** 所有 EMA 交叉信号去重后的唯一标的数 */
-const totalCrossCount = computed(() => {
+/** 空转多信号：按周期过滤 */
+const bullFiltered = computed(() => {
+  if (!emaCross.value) return []
+  return emaCross.value[`bull_${emaTab.value}`] || []
+})
+
+/** 多转空信号：按周期过滤 */
+const bearFiltered = computed(() => {
+  if (!emaCross.value) return []
+  return emaCross.value[`bear_${emaTab.value}`] || []
+})
+
+/** 空转多总数量 */
+const bullCount = computed(() => {
   if (!emaCross.value) return 0
-  const codes = new Set()
-  ;['bull_4h', 'bear_4h', 'bull_1d', 'bear_1d'].forEach(key => {
-    ;(emaCross.value[key] || []).forEach(item => codes.add(item.code))
-  })
-  return codes.size
+  return (emaCross.value.bull_4h?.length || 0) + (emaCross.value.bull_1d?.length || 0)
+})
+
+/** 多转空总数量 */
+const bearCount = computed(() => {
+  if (!emaCross.value) return 0
+  return (emaCross.value.bear_4h?.length || 0) + (emaCross.value.bear_1d?.length || 0)
 })
 
 function scorePillClass(score) {
@@ -296,7 +382,6 @@ onMounted(loadData)
   text-overflow: ellipsis;
 }
 
-/* Momentum bar */
 .momentum-bar-wrap {
   display: flex;
   align-items: center;

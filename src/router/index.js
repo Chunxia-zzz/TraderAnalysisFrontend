@@ -17,11 +17,6 @@ const routes = [
     component: () => import('../views/Chart.vue'),
   },
   {
-    path: '/scores-overview',
-    name: 'scores-overview',
-    component: () => import('../views/ScoresOverview.vue'),
-  },
-  {
     path: '/momentum-leaders',
     name: 'momentum-leaders',
     component: () => import('../views/MomentumLeaders.vue'),
