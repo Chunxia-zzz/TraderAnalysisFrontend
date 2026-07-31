@@ -25,14 +25,225 @@
     </a-card>
 
     <a-row :gutter="[16, 16]">
-      <!-- 最新评分 -->
+      <!-- 基本面估值 -->
       <a-col :span="24">
-        <a-card :title="`评分 — ${code || ''}`" :loading="scoreLoading">
+        <a-card title="基本面估值" :loading="fundaLoading">
+          <template v-if="funda">
+            <a-row :gutter="[16, 16]">
+              <!-- 分析师目标价 -->
+              <a-col :xs="24" :md="12">
+                <div class="funda-block">
+                  <span class="funda-label">分析师目标价</span>
+                  <span class="funda-value mono">{{ funda.analyst_target ? '$' + funda.analyst_target : '-' }}</span>
+                  <span v-if="funda.analyst_upside_pct != null"
+                    :class="funda.analyst_upside_pct > 20 ? 'text-up' : funda.analyst_upside_pct > 0 ? 'text-up-mild' : 'text-down'">
+                    {{ funda.analyst_upside_pct > 0 ? '+' : '' }}{{ funda.analyst_upside_pct }}%
+                  </span>
+                  <span v-else class="text-muted">暂无</span>
+                </div>
+              </a-col>
+              <!-- 晨星公允价值 -->
+              <a-col :xs="24" :md="12">
+                <div class="funda-block">
+                  <span class="funda-label">晨星公允价值</span>
+                  <span class="funda-value mono">{{ funda.morningstar_value ? '$' + funda.morningstar_value : '-' }}</span>
+                  <span v-if="funda.morningstar_discount_pct != null"
+                    :class="funda.morningstar_discount_pct > 20 ? 'text-up' : funda.morningstar_discount_pct > 0 ? 'text-up-mild' : 'text-down'">
+                    {{ funda.morningstar_discount_pct > 0 ? '+' : '' }}{{ funda.morningstar_discount_pct }}%
+                  </span>
+                  <span v-else class="text-muted">暂无</span>
+                </div>
+              </a-col>
+              <!-- 关键指标 -->
+              <a-col :xs="24" :md="8" v-if="funda.forward_pe">
+                <div class="funda-block">
+                  <span class="funda-label">远期 PE</span>
+                  <span class="funda-value mono">{{ funda.forward_pe }}</span>
+                </div>
+              </a-col>
+              <a-col :xs="24" :md="8" v-if="funda.peg_ratio">
+                <div class="funda-block">
+                  <span class="funda-label">PEG</span>
+                  <span class="funda-value mono">{{ funda.peg_ratio }}</span>
+                </div>
+              </a-col>
+              <a-col :xs="24" :md="8" v-if="funda.roe">
+                <div class="funda-block">
+                  <span class="funda-label">ROE</span>
+                  <span class="funda-value mono">{{ funda.roe }}%</span>
+                </div>
+              </a-col>
+            </a-row>
+          </template>
+          <a-empty v-else-if="!fundaLoading" :description="fundaMessage || '暂无基本面数据'" />
+        </a-card>
+      </a-col>
+
+      <!-- 道氏技术面 -->
+      <a-col :span="24">
+        <a-card title="道氏技术面" :loading="analysisLoading">
+          <template v-if="analysis">
+            <!-- 道氏三层趋势 -->
+            <div class="dow-section">
+              <div class="dow-header">🌊 道氏趋势</div>
+              <!-- 三层概览 -->
+              <a-row :gutter="[12, 8]">
+                <a-col :xs="24" :md="8" v-if="analysis.dow_theory">
+                  <div class="dow-tier" :class="'tier-' + analysis.dow_theory.tide">
+                    <span class="tier-level">潮汐 · 周线</span>
+                    <span class="tier-dir">{{ tideLabel(analysis.dow_theory.tide) }}</span>
+                    <span class="tier-ma mono" v-if="analysis.dow_theory.tide_ma20">MA20 {{ analysis.dow_theory.tide_ma20 }}</span>
+                  </div>
+                </a-col>
+                <a-col :xs="24" :md="8" v-if="analysis.dow_theory">
+                  <div class="dow-tier" :class="'tier-' + analysis.dow_theory.wave">
+                    <span class="tier-level">波浪 · 日线</span>
+                    <span class="tier-dir">{{ waveLabel(analysis.dow_theory.wave) }}</span>
+                    <span class="tier-ma mono" v-if="analysis.dow_theory.wave_ma20">MA20 {{ analysis.dow_theory.wave_ma20 }}</span>
+                  </div>
+                </a-col>
+                <a-col :xs="24" :md="8" v-if="analysis.dow_theory">
+                  <div class="dow-tier">
+                    <span class="tier-level">涟漪 · 日线</span>
+                    <span class="tier-dir" :class="analysis.dow_theory.ripple?.rsi12 < 35 ? 'text-up' : analysis.dow_theory.ripple?.rsi12 > 70 ? 'text-down' : ''">
+                      RSI {{ analysis.dow_theory.ripple?.rsi12 ?? '-' }}
+                    </span>
+                    <span class="tier-ma mono" v-if="analysis.dow_theory.ripple?.bb_pct_b != null">%B {{ (analysis.dow_theory.ripple.bb_pct_b * 100).toFixed(0) }}%</span>
+                  </div>
+                </a-col>
+              </a-row>
+              <!-- 信号提示 -->
+              <div v-if="analysis.dow_theory" class="dow-signal" :class="signalClass(analysis.dow_theory.signal)">
+                <span class="signal-icon">{{ signalIcon(analysis.dow_theory.signal) }}</span>
+                <span class="signal-text">{{ analysis.dow_theory.signal }}</span>
+                <span class="signal-desc">{{ analysis.dow_theory.signal_desc }}</span>
+                <span class="signal-hint">{{ analysis.dow_theory.trade_hint }}</span>
+              </div>
+            </div>
+
+            <a-divider style="margin: 16px 0" />
+
+            <!-- 关键位置 -->
+            <div class="dow-section">
+              <div class="dow-header">🎯 关键位置</div>
+              <a-row :gutter="16">
+                <a-col :xs="24" :md="12">
+                  <div class="dow-sub-label support-label">支撑位</div>
+                  <template v-if="analysis.supports.length">
+                    <div v-for="s in analysis.supports" :key="s.price" class="dow-kv">
+                      <span class="dow-k">{{ s.label }}</span>
+                      <span v-if="s.is_key" class="key-badge">★</span>
+                      <span class="dow-v mono support-price">{{ fmt(s.price) }}</span>
+                      <span class="dow-pct" :class="s.price < analysis.close ? 'text-down' : 'text-up'">{{ pctDiff(s.price, analysis.close) }}</span>
+                      <a-tooltip v-if="s.dow_context" :title="s.dow_context" placement="right">
+                        <span class="dow-ctx-icon">?</span>
+                      </a-tooltip>
+                    </div>
+                  </template>
+                  <span v-else class="sr-empty">无有效支撑位</span>
+                </a-col>
+                <a-col :xs="24" :md="12">
+                  <div class="dow-sub-label resist-label">压力位</div>
+                  <template v-if="analysis.resistances.length">
+                    <div v-for="r in analysis.resistances" :key="r.price" class="dow-kv">
+                      <span class="dow-k">{{ r.label }}</span>
+                      <span v-if="r.is_key" class="key-badge">★</span>
+                      <span class="dow-v mono resist-price">{{ fmt(r.price) }}</span>
+                      <span class="dow-pct" :class="r.price > analysis.close ? 'text-up' : 'text-down'">{{ pctDiff(r.price, analysis.close) }}</span>
+                      <a-tooltip v-if="r.dow_context" :title="r.dow_context" placement="right">
+                        <span class="dow-ctx-icon">?</span>
+                      </a-tooltip>
+                    </div>
+                  </template>
+                  <span v-else class="sr-empty">无有效压力位</span>
+                </a-col>
+              </a-row>
+            </div>
+
+            <!-- 盈亏比 -->
+            <a-divider style="margin: 16px 0" />
+            <div class="dow-section" v-if="analysis.risk_reward && (analysis.risk_reward.long_rr || analysis.risk_reward.short_rr)">
+              <div class="dow-header">📏 盈亏比</div>
+              <a-row :gutter="16">
+                <a-col :span="24">
+                  <div class="rr-block">
+                    <div class="rr-line">
+                      <span class="rr-label">当前价</span>
+                      <span class="rr-val mono">${{ analysis.close }}</span>
+                    </div>
+                    <div class="rr-line" v-if="analysis.risk_reward.short_target">
+                      <span class="rr-label">到支撑 {{ analysis.risk_reward.short_target }}</span>
+                      <span class="rr-pct down">{{ pctDiff(analysis.risk_reward.short_target, analysis.close) }}</span>
+                      <span class="rr-tag sell">▼ 做空止盈</span>
+                    </div>
+                    <div class="rr-line" v-if="analysis.risk_reward.long_target">
+                      <span class="rr-label">到压力 {{ analysis.risk_reward.long_target }}</span>
+                      <span class="rr-pct up">{{ pctDiff(analysis.risk_reward.long_target, analysis.close) }}</span>
+                      <span class="rr-tag buy">▲ 做多止盈</span>
+                    </div>
+                    <div class="rr-conclusion">
+                      <template v-if="analysis.risk_reward.long_rr > analysis.risk_reward.short_rr">
+                        做多盈亏比 <b>{{ analysis.risk_reward.long_rr }}:1</b>，优于做空 {{ analysis.risk_reward.short_rr }}:1
+                      </template>
+                      <template v-else>
+                        做空盈亏比 <b>{{ analysis.risk_reward.short_rr }}:1</b>，优于做多 {{ analysis.risk_reward.long_rr }}:1
+                      </template>
+                    </div>
+                  </div>
+                </a-col>
+              </a-row>
+            </div>
+
+            <!-- 形态信号 -->
+            <div class="dow-section" style="margin-top: 16px">
+              <div class="dow-header">📐 形态信号</div>
+              <div v-if="analysis.patterns.length" class="pattern-wrap">
+                <a-tooltip v-for="p in analysis.patterns" :key="p.id" :title="(p.desc || '') + (p.confidence?.note ? '\n' + p.confidence.note : '')">
+                  <a-tag :color="p.bullish === true ? 'green' : p.bullish === false ? 'red' : 'default'">
+                    {{ p.label }}<span v-if="p.confidence" class="conf-dot" :class="'conf-' + p.confidence.level" />
+                  </a-tag>
+                </a-tooltip>
+              </div>
+              <span v-else class="sr-empty">无明显形态信号</span>
+            </div>
+
+            <a-divider style="margin: 16px 0" />
+
+            <div class="dow-section">
+              <div class="dow-header">📏 量能 & 波动</div>
+              <a-row :gutter="16">
+                <a-col :xs="12" :md="6">
+                  <span class="dow-label">成交量比</span>
+                  <span class="dow-value mono">{{ analysis.trend.vol_ratio != null ? analysis.trend.vol_ratio + 'x' : '-' }}</span>
+                </a-col>
+                <a-col :xs="12" :md="6">
+                  <span class="dow-label">ATR14</span>
+                  <span class="dow-value mono">{{ analysis.trend.atr14 != null ? fmt(analysis.trend.atr14) : '-' }}</span>
+                </a-col>
+                <a-col :xs="12" :md="6">
+                  <span class="dow-label">ATR波动率</span>
+                  <span class="dow-value mono">{{ analysis.trend.atr_pct != null ? (analysis.trend.atr_pct * 100).toFixed(2) + '%' : '-' }}</span>
+                </a-col>
+                <a-col :xs="12" :md="6" v-if="analysis.dow_theory?.vol_context">
+                  <span class="dow-label">量能信号</span>
+                  <span class="dow-value" style="font-size:14px">{{ analysis.dow_theory.vol_context }}</span>
+                </a-col>
+              </a-row>
+            </div>
+
+            <div class="sr-footer">数据日期：{{ analysis.date }} · 当前价 {{ fmt(analysis.close) }}</div>
+          </template>
+          <a-empty v-else-if="!analysisLoading" description="暂无分析数据" />
+        </a-card>
+      </a-col>
+      <!-- 综合评分结论 -->
+      <a-col :span="24">
+        <a-card :title="`综合评分 — ${code || ''}`" :loading="scoreLoading">
           <template v-if="score">
             <a-row :gutter="16" align="middle" style="margin-bottom: 16px">
               <a-col>
                 <a-statistic
-                  title="综合评分"
+                  title="评分"
                   :value="score.total_score"
                   :precision="1"
                   :value-style="{ color: scoreColor }"
@@ -46,7 +257,6 @@
                 <span style="color: #999; font-size: 12px">{{ score.date }}</span>
               </a-col>
             </a-row>
-            <!-- 因子明细 -->
             <div v-for="(item, key) in score.breakdown" :key="key" class="factor-row">
               <span class="factor-label">{{ factorLabel(key) }}</span>
               <a-progress
@@ -63,217 +273,6 @@
           <a-empty v-else-if="!scoreLoading" :description="scoreMessage || '暂无评分数据'" />
         </a-card>
       </a-col>
-
-      <!-- 最新技术指标 -->
-      <a-col :xs="24" :md="12">
-        <a-card title="最新技术指标" :loading="indicatorLoading">
-          <a-descriptions v-if="latest" :column="2" bordered size="small">
-            <a-descriptions-item label="日期">{{ latest.date }}</a-descriptions-item>
-            <a-descriptions-item label="收盘价">{{ fmt(latest.close) }}</a-descriptions-item>
-            <a-descriptions-item label="开盘价">{{ fmt(latest.open) }}</a-descriptions-item>
-            <a-descriptions-item label="最高价">{{ fmt(latest.high) }}</a-descriptions-item>
-            <a-descriptions-item label="最低价">{{ fmt(latest.low) }}</a-descriptions-item>
-            <a-descriptions-item label="成交量">{{ fmtVol(latest.volume) }}</a-descriptions-item>
-          </a-descriptions>
-          <a-empty v-else-if="!indicatorLoading" description="暂无指标数据" />
-        </a-card>
-      </a-col>
-
-      <!-- 均线 & 布林 -->
-      <a-col :xs="24" :md="12">
-        <a-card title="均线 & 布林带" :loading="indicatorLoading">
-          <a-descriptions v-if="latest" :column="2" bordered size="small">
-            <a-descriptions-item label="MA5">{{ fmt(latest.ma5) }}</a-descriptions-item>
-            <a-descriptions-item label="MA10">{{ fmt(latest.ma10) }}</a-descriptions-item>
-            <a-descriptions-item label="MA20">{{ fmt(latest.ma20) }}</a-descriptions-item>
-            <a-descriptions-item label="MA60">{{ fmt(latest.ma60) }}</a-descriptions-item>
-            <a-descriptions-item label="BOLL上轨">{{ fmt(latest.boll_upper) }}</a-descriptions-item>
-            <a-descriptions-item label="BOLL中轨">{{ fmt(latest.boll_mid) }}</a-descriptions-item>
-            <a-descriptions-item label="BOLL下轨">{{ fmt(latest.boll_lower) }}</a-descriptions-item>
-          </a-descriptions>
-          <a-empty v-else-if="!indicatorLoading" description="暂无数据" />
-        </a-card>
-      </a-col>
-
-      <!-- MACD & RSI -->
-      <a-col :span="24">
-        <a-card title="MACD & RSI" :loading="indicatorLoading">
-          <a-descriptions v-if="latest" :column="4" bordered size="small">
-            <a-descriptions-item label="DIF">{{ fmt(latest.dif) }}</a-descriptions-item>
-            <a-descriptions-item label="DEA">{{ fmt(latest.dea) }}</a-descriptions-item>
-            <a-descriptions-item label="MACD">{{ fmt(latest.macd) }}</a-descriptions-item>
-            <a-descriptions-item label="RSI12">{{ fmt(latest.rsi12) }}</a-descriptions-item>
-          </a-descriptions>
-          <a-empty v-else-if="!indicatorLoading" description="暂无数据" />
-        </a-card>
-      </a-col>
-
-      <!-- 交易信号 -->
-      <a-col :span="24">
-        <a-card title="交易信号" :loading="signalsLoading">
-          <template v-if="tradeSignals">
-            <div class="signals-meta">
-              数据日期：{{ tradeSignals.date }}
-              <span v-if="tradeSignals.top_triggered_count > 0" class="sig-badge badge-sell">
-                顶部预警 {{ tradeSignals.top_triggered_count }}
-              </span>
-              <span v-if="tradeSignals.bottom_triggered_count > 0" class="sig-badge badge-buy">
-                底部买入 {{ tradeSignals.bottom_triggered_count }}
-              </span>
-            </div>
-            <a-row :gutter="16" style="margin-top: 12px">
-              <!-- 左栏：顶部预警 -->
-              <a-col :xs="24" :md="12">
-                <div class="signals-col-label sell-label">顶部预警（卖出侧）</div>
-                <div
-                  v-for="sig in tradeSignals.top_signals"
-                  :key="sig.signal_type"
-                  class="signal-row"
-                  :class="sig.triggered ? 'signal-triggered-sell' : 'signal-inactive'"
-                >
-                  <span class="signal-dot" :class="sig.triggered ? 'dot-sell' : 'dot-off'">●</span>
-                  <span class="signal-name">{{ sig.label }}</span>
-                  <template v-if="sig.triggered">
-                    <div class="signal-strength-bar">
-                      <div class="strength-fill fill-sell" :style="{ width: (sig.strength * 100) + '%' }" />
-                    </div>
-                    <a-tooltip :title="sig.description">
-                      <span class="signal-action action-sell">{{ sig.action }}</span>
-                    </a-tooltip>
-                  </template>
-                  <span v-else class="signal-untriggered">未触发</span>
-                </div>
-              </a-col>
-              <!-- 右栏：底部买入 -->
-              <a-col :xs="24" :md="12">
-                <div class="signals-col-label buy-label">底部买入（买入侧）</div>
-                <div
-                  v-for="sig in tradeSignals.bottom_signals"
-                  :key="sig.signal_type"
-                  class="signal-row"
-                  :class="sig.triggered ? 'signal-triggered-buy' : 'signal-inactive'"
-                >
-                  <span class="signal-dot" :class="sig.triggered ? 'dot-buy' : 'dot-off'">●</span>
-                  <span class="signal-name">{{ sig.label }}</span>
-                  <template v-if="sig.triggered">
-                    <div class="signal-strength-bar">
-                      <div class="strength-fill fill-buy" :style="{ width: (sig.strength * 100) + '%' }" />
-                    </div>
-                    <a-tooltip :title="sig.description">
-                      <span class="signal-action action-buy">{{ sig.action }}</span>
-                    </a-tooltip>
-                  </template>
-                  <span v-else class="signal-untriggered">未触发</span>
-                </div>
-              </a-col>
-            </a-row>
-          </template>
-          <a-empty v-else-if="!signalsLoading" description="暂无信号数据" />
-        </a-card>
-      </a-col>
-
-      <!-- 支撑 & 压力位 -->
-      <a-col :xs="24" :md="12">
-        <a-card title="支撑 & 压力位" :loading="analysisLoading">
-          <template v-if="analysis">
-            <!-- 支撑位 -->
-            <div class="sr-group-label support-label">支撑位</div>
-            <template v-if="analysis.supports.length">
-              <div v-for="s in analysis.supports" :key="s.price" class="sr-row">
-                <span class="sr-price support-price mono">{{ fmt(s.price) }}</span>
-                <span class="sr-item-label">{{ s.label }}</span>
-                <span class="sr-dist" :class="s.price < analysis.close ? 'text-down' : 'text-up'">
-                  {{ pctDiff(s.price, analysis.close) }}
-                </span>
-                <span class="sr-strength">{{ strengthDots(s.strength) }}</span>
-              </div>
-            </template>
-            <span v-else class="sr-empty">无有效支撑位</span>
-
-            <a-divider style="margin: 12px 0" />
-
-            <!-- 压力位 -->
-            <div class="sr-group-label resist-label">压力位</div>
-            <template v-if="analysis.resistances.length">
-              <div v-for="r in analysis.resistances" :key="r.price" class="sr-row">
-                <span class="sr-price resist-price mono">{{ fmt(r.price) }}</span>
-                <span class="sr-item-label">{{ r.label }}</span>
-                <span class="sr-dist" :class="r.price > analysis.close ? 'text-up' : 'text-down'">
-                  {{ pctDiff(r.price, analysis.close) }}
-                </span>
-                <span class="sr-strength">{{ strengthDots(r.strength) }}</span>
-              </div>
-            </template>
-            <span v-else class="sr-empty">无有效压力位</span>
-
-            <div class="sr-footer">数据日期：{{ analysis.date }} · 当前价 {{ fmt(analysis.close) }}</div>
-          </template>
-          <a-empty v-else-if="!analysisLoading" description="暂无分析数据" />
-        </a-card>
-      </a-col>
-
-      <!-- 技术形态 & 趋势 -->
-      <a-col :xs="24" :md="12">
-        <a-card title="技术形态 & 趋势" :loading="analysisLoading">
-          <template v-if="analysis">
-            <!-- 形态信号 -->
-            <div class="section-sub-label">形态信号</div>
-            <div v-if="analysis.patterns.length" class="pattern-wrap">
-              <a-tooltip v-for="p in analysis.patterns" :key="p.id" :title="p.desc">
-                <a-tag
-                  :color="p.bullish === true ? 'green' : p.bullish === false ? 'red' : 'default'"
-                  style="margin-bottom: 6px; cursor: default"
-                >
-                  {{ p.label }}
-                </a-tag>
-              </a-tooltip>
-            </div>
-            <span v-else class="sr-empty">无明显形态信号</span>
-
-            <a-divider style="margin: 12px 0" />
-
-            <!-- 趋势数据 -->
-            <div class="section-sub-label">趋势判断</div>
-            <a-descriptions :column="2" size="small">
-              <a-descriptions-item label="主趋势">
-                <span :class="trendColorClass(analysis.trend.primary)">
-                  {{ trendText(analysis.trend.primary) }}
-                </span>
-              </a-descriptions-item>
-              <a-descriptions-item label="短期趋势">
-                <span :class="trendColorClass(analysis.trend.short_term)">
-                  {{ trendText(analysis.trend.short_term) }}
-                </span>
-              </a-descriptions-item>
-              <a-descriptions-item label="RSI12">
-                <span class="mono">{{ analysis.trend.rsi12 ?? '-' }}</span>
-              </a-descriptions-item>
-              <a-descriptions-item label="MACD">
-                <span :class="macdColorClass(analysis.trend.macd_bias)">
-                  {{ macdText(analysis.trend.macd_bias) }}
-                </span>
-              </a-descriptions-item>
-              <a-descriptions-item label="BB位置(%B)">
-                <span class="mono">
-                  {{ analysis.trend.bb_pct_b != null ? (analysis.trend.bb_pct_b * 100).toFixed(1) + '%' : '-' }}
-                </span>
-              </a-descriptions-item>
-              <a-descriptions-item label="成交量比">
-                <span class="mono">{{ analysis.trend.vol_ratio != null ? analysis.trend.vol_ratio + 'x' : '-' }}</span>
-              </a-descriptions-item>
-              <a-descriptions-item label="ATR14">
-                <span class="mono">{{ analysis.trend.atr14 != null ? fmt(analysis.trend.atr14) : '-' }}</span>
-              </a-descriptions-item>
-              <a-descriptions-item label="ATR波动率">
-                <span class="mono">
-                  {{ analysis.trend.atr_pct != null ? (analysis.trend.atr_pct * 100).toFixed(2) + '%' : '-' }}
-                </span>
-              </a-descriptions-item>
-            </a-descriptions>
-          </template>
-          <a-empty v-else-if="!analysisLoading" description="暂无分析数据" />
-        </a-card>
-      </a-col>
     </a-row>
   </div>
 </template>
@@ -283,7 +282,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import dayjs from 'dayjs'
 import { message } from 'ant-design-vue'
-import { getAnalysis, getIndicatorsLatest, getScoresLatest, getTradeSignals, getWatchlist } from '../api/trader'
+import { getAnalysis, getScoresLatest, getWatchlist, getFundamental } from '../api/trader'
 
 const route = useRoute()
 
@@ -291,15 +290,14 @@ const code = ref(undefined)
 const selectedDate = ref(null)
 const watchlistLoading = ref(false)
 const watchlistOptions = ref([])
-const latest = ref(null)
 const score = ref(null)
 const scoreMessage = ref('')
 const analysis = ref(null)
-const tradeSignals = ref(null)
-const indicatorLoading = ref(true)
+const funda = ref(null)
+const fundaMessage = ref('')
 const scoreLoading = ref(true)
 const analysisLoading = ref(true)
-const signalsLoading = ref(true)
+const fundaLoading = ref(true)
 
 const scoreColor = computed(() => {
   if (!score.value) return 'var(--text-muted)'
@@ -346,13 +344,6 @@ function fmt(val) {
   return val != null ? Number(val).toFixed(2) : '-'
 }
 
-function fmtVol(val) {
-  if (val == null) return '-'
-  if (val >= 1e6) return (val / 1e6).toFixed(2) + 'M'
-  if (val >= 1e3) return (val / 1e3).toFixed(0) + 'K'
-  return val.toString()
-}
-
 function pctDiff(price, base) {
   if (!price || !base) return '-'
   const pct = ((price - base) / base * 100).toFixed(1)
@@ -380,32 +371,45 @@ function macdColorClass(val) {
   return { bullish: 'text-up', bearish: 'text-down', neutral: '' }[val] ?? ''
 }
 
+// ── 道氏趋势 ──
+const TIDE_LABELS = { up: '↑ 涨潮', down: '↓ 退潮', neutral: '— 无潮汐' }
+const WAVE_LABELS = { up: '↑ 上升浪', down: '↓ 下降浪', neutral: '— 横盘' }
+function tideLabel(val) { return TIDE_LABELS[val] ?? '-' }
+function waveLabel(val) { return WAVE_LABELS[val] ?? '-' }
+function signalIcon(val) {
+  const icons = { '顺势做多': '🚀', '回调加仓': '🔍', '等回踩做多': '⏳', '短线反弹': '📉',
+    '空仓等待': '❌', '反弹做空': '🔻', '回避/做空': '⛔', '谨慎做多': '⚠️', '等回调做多': '🔍',
+    '反弹减仓': '📉', '空仓观望': '❌', '等突破做多': '⏳', '观望等跌': '⏳', '轻仓试多': '🟡',
+    '轻仓观望': '🟡', '持续观望': '🟡', '不宜做多': '❌', '观望': '⚪' }
+  return icons[val] ?? '⚪'
+}
+function signalClass(val) {
+  if (val === '顺势做多') return 'sig-strong'
+  if (['回调加仓', '等回调做多'].includes(val)) return 'sig-buy'
+  if (['反弹做空', '回避/做空', '空仓等待', '空仓观望', '不宜做多'].includes(val)) return 'sig-sell'
+  if (['等回踩做多', '短线反弹', '谨慎做多', '反弹减仓', '轻仓试多'].includes(val)) return 'sig-caution'
+  return 'sig-neutral'
+}
+
 async function handleCodeChange() {
   loadData()
 }
 
 async function loadData() {
   if (!code.value) return
-  latest.value = null
   score.value = null
   scoreMessage.value = ''
   analysis.value = null
-  tradeSignals.value = null
-  indicatorLoading.value = true
+  funda.value = null
   scoreLoading.value = true
   analysisLoading.value = true
-  signalsLoading.value = true
+  fundaLoading.value = true
   const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-  const [indRes, scoreRes, analysisRes, sigRes] = await Promise.allSettled([
-    getIndicatorsLatest(code.value),
+  const [scoreRes, analysisRes, fundaRes] = await Promise.allSettled([
     getScoresLatest(code.value, dateStr),
-    getAnalysis(code.value),
-    getTradeSignals(code.value, dateStr),
+    getAnalysis(code.value, dateStr),
+    getFundamental(code.value, dateStr),
   ])
-  if (indRes.status === 'fulfilled') {
-    const d = indRes.value.data
-    latest.value = (d && d.data === null) ? null : d
-  }
   if (scoreRes.status === 'fulfilled') {
     const d = scoreRes.value.data
     if (d && d.data === null) {
@@ -419,14 +423,18 @@ async function loadData() {
     const d = analysisRes.value.data
     analysis.value = (d && d.data === null) ? null : d
   }
-  if (sigRes.status === 'fulfilled') {
-    const d = sigRes.value.data
-    tradeSignals.value = (d && d.data === null) ? null : d
+  if (fundaRes.status === 'fulfilled') {
+    const d = fundaRes.value.data
+    if (d && d.data === null) {
+      funda.value = null
+      fundaMessage.value = d.message || '暂无基本面数据'
+    } else if (d) {
+      funda.value = d
+    }
   }
-  indicatorLoading.value = false
   scoreLoading.value = false
   analysisLoading.value = false
-  signalsLoading.value = false
+  fundaLoading.value = false
 }
 
 onMounted(async () => {
@@ -480,16 +488,60 @@ onMounted(async () => {
   color: var(--green);
 }
 
-/* ── 支撑/压力位 ── */
-.sr-group-label {
+/* ── 道氏技术面 ── */
+.dow-section {
+  margin-bottom: 4px;
+}
+.dow-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dow-sub-label {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.support-label { color: var(--green); }
-.resist-label  { color: var(--red); }
+.dow-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.dow-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+.dow-kv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.dow-k {
+  flex: 1;
+  color: var(--text-secondary);
+}
+.dow-v {
+  font-weight: 600;
+  min-width: 60px;
+  text-align: right;
+}
+.dow-pct {
+  font-size: 12px;
+  min-width: 50px;
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+}
+
+.support-price { color: var(--green); }
+.resist-price  { color: var(--red); }
 
 .sr-row {
   display: flex;
@@ -664,4 +716,99 @@ onMounted(async () => {
   color: var(--text-muted);
   margin-left: auto;
 }
+
+/* ── 基本面估值 ── */
+.funda-block {
+  padding: 12px 0;
+}
+.funda-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.funda-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+.text-up      { color: var(--red);   font-weight: 600; }
+.text-up-mild { color: var(--orange, #fa8c16); font-weight: 600; }
+.text-down    { color: var(--green); font-weight: 600; }
+.text-muted   { font-size: 13px; color: var(--text-muted); }
+
+.support-label { color: var(--green); }
+.resist-label  { color: var(--red); }
+
+/* ── 道氏三层趋势 ── */
+.dow-tier {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  min-height: 72px;
+}
+.dow-tier.tier-up   { border-left: 3px solid var(--red); }
+.dow-tier.tier-down { border-left: 3px solid var(--green); }
+.tier-level {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.tier-dir {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+.tier-ma {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.dow-signal {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dow-signal.sig-strong  { background: rgba(255, 77, 79, 0.08); border: 1px solid rgba(255, 77, 79, 0.15); }
+.dow-signal.sig-buy     { background: rgba(82, 196, 26, 0.08);  border: 1px solid rgba(82, 196, 26, 0.15); }
+.dow-signal.sig-caution { background: rgba(255, 159, 28, 0.08); border: 1px solid rgba(255, 159, 28, 0.15); }
+.dow-signal.sig-sell    { background: rgba(240, 173, 78, 0.08); border: 1px solid rgba(240, 173, 78, 0.15); }
+.dow-signal.sig-neutral { background: var(--bg-hover); }
+.signal-icon { font-size: 18px; }
+.signal-text { font-size: 16px; font-weight: 700; }
+.signal-desc { font-size: 12px; color: var(--text-secondary); }
+.signal-hint { width: 100%; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+/* ── 关键位置增强 ── */
+.key-badge { font-size: 10px; color: var(--accent); margin-right: 4px; flex-shrink: 0; }
+.dow-ctx-icon { font-size: 10px; color: var(--text-muted); cursor: help; background: var(--bg-hover); border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ── 盈亏比 ── */
+.rr-block { padding: 12px 16px; border-radius: 8px; background: var(--bg-hover); }
+.rr-line { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.rr-label { font-size: 12px; color: var(--text-muted); min-width: 80px; }
+.rr-val   { font-size: 14px; font-weight: 600; color: var(--text); }
+.rr-pct   { font-size: 13px; font-weight: 600; min-width: 50px; }
+.rr-pct.up   { color: var(--red); }
+.rr-pct.down { color: var(--green); }
+.rr-tag  { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.rr-tag.buy  { background: rgba(255,77,79,0.1); color: var(--red); }
+.rr-tag.sell { background: rgba(82,196,26,0.1); color: var(--green); }
+.rr-conclusion { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-secondary); }
+.rr-conclusion b { color: var(--text); }
+
+/* ── 形态信号置信度 ── */
+.conf-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+.conf-dot.conf-high   { background: var(--red); box-shadow: 0 0 4px var(--red); }
+.conf-dot.conf-medium { background: var(--accent); }
+.conf-dot.conf-low    { background: var(--text-muted); }
 </style>

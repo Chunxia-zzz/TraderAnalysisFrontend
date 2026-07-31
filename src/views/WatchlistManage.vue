@@ -12,6 +12,11 @@
             <a-select-option value="HK">港股</a-select-option>
           </a-select>
           <a-input-search v-model:value="filters.search" placeholder="搜索代码/名称" style="width: 200px" @search="fetchList" allow-clear />
+          <a-select v-model:value="sortBy" placeholder="排序" style="width: 140px" @change="applySort">
+            <a-select-option value="">默认顺序</a-select-option>
+            <a-select-option value="discount_desc">折价高→低</a-select-option>
+            <a-select-option value="discount_asc">折价低→高</a-select-option>
+          </a-select>
         </a-space>
         <a-space>
           <a-button type="primary" @click="showAddModal">新增标的</a-button>
@@ -33,10 +38,10 @@
           <template v-if="column.key === 'tags'">
             <a-tag v-for="t in record.tags" :key="t" size="small">{{ t }}</a-tag>
           </template>
-          <template v-if="column.key === 'recommended_strategy'">
-            <a-tag v-if="record.recommended_strategy" :color="strategyColor(record.recommended_strategy)">
-              {{ strategyLabel(record.recommended_strategy) }}
-            </a-tag>
+          <template v-if="column.key === 'ms_discount'">
+            <span v-if="record.ms_discount_pct != null" :style="{ color: record.ms_discount_pct > 15 ? 'var(--red)' : record.ms_discount_pct > 0 ? 'var(--accent)' : 'var(--green)', fontWeight: 600 }">
+              {{ record.ms_discount_pct > 0 ? '+' : '' }}{{ record.ms_discount_pct }}%
+            </span>
             <span v-else style="color: #999">-</span>
           </template>
           <template v-if="column.key === 'action'">
@@ -130,7 +135,7 @@ import { message } from 'ant-design-vue'
 import { getWatchlist, addWatchlistStock, updateWatchlistStock, deleteWatchlistStock, refreshSnapshot } from '../api/trader'
 
 const loading = ref(false)
-const refreshing = ref(false)
+const sortBy = ref('discount_desc')
 const submitting = ref(false)
 const list = ref([])
 const categories = ref({})
@@ -140,11 +145,9 @@ const columns = [
   { title: '代码', dataIndex: 'code', key: 'code', width: 100 },
   { title: '名称', dataIndex: 'name', key: 'name', width: 140 },
   { title: '分类', dataIndex: 'category', key: 'category', width: 80 },
-  { title: '当前价', dataIndex: 'current_price', key: 'current_price', width: 80 },
-  { title: '推荐策略', key: 'recommended_strategy', width: 140 },
-  { title: 'Forward PE', dataIndex: 'forward_pe', key: 'forward_pe', width: 100 },
   { title: '分析师目标', dataIndex: 'analyst_target_mean', key: 'analyst_target_mean', width: 100 },
   { title: '晨星公允', dataIndex: 'morningstar_fair_value', key: 'morningstar_fair_value', width: 100 },
+  { title: '晨星折价', key: 'ms_discount', width: 90 },
   { title: '备注', dataIndex: 'notes', key: 'notes', width: 200, ellipsis: true },
   { title: '操作', key: 'action', width: 120, fixed: 'right' },
 ]
@@ -183,6 +186,7 @@ async function fetchList() {
     const { data } = await getWatchlist(params)
     list.value = data.watchlist || []
     categories.value = data.categories || {}
+    applySort()
   } catch (e) {
     message.error('加载标的池失败')
   } finally {
@@ -281,6 +285,14 @@ async function handleDelete(code) {
 }
 
 // 刷新快照
+function applySort() {
+  if (sortBy.value === 'discount_desc') {
+    list.value.sort((a, b) => (b.ms_discount_pct ?? -999) - (a.ms_discount_pct ?? -999))
+  } else if (sortBy.value === 'discount_asc') {
+    list.value.sort((a, b) => (a.ms_discount_pct ?? 999) - (b.ms_discount_pct ?? 999))
+  }
+}
+
 async function handleRefreshAll() {
   refreshing.value = true
   try {

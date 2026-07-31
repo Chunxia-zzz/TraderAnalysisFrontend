@@ -13,10 +13,12 @@
         <a-button type="primary" size="small" @click="loadData" :loading="loading">查询</a-button>
       </div>
       <div class="toolbar-stats" v-if="emaCross || overview">
+        <!-- V2 每日优选已上线 -->
         <span class="stat-chip green">空转多 {{ bullCount }} 只</span>
         <span class="stat-chip red">多转空 {{ bearCount }} 只</span>
         <span class="stat-chip red">主升浪龙头 {{ leaders.length }} 只</span>
         <span class="stat-chip green" v-if="oversold.length">主跌浪超卖 {{ oversold.length }} 只</span>
+        <span class="stat-chip green" v-if="dailyPicks.length">低估做多 {{ dailyPicks.length }} 只</span>
       </div>
     </div>
 
@@ -27,6 +29,7 @@
         <a-select-option value="bear">多转空</a-select-option>
         <a-select-option value="leaders">主升浪龙头</a-select-option>
         <a-select-option value="oversold">主跌浪超卖</a-select-option>
+        <a-select-option value="picks">低估做多</a-select-option>
       </a-select>
     </div>
 
@@ -172,7 +175,40 @@
           </div>
         </template>
 
-        <a-empty v-else-if="!loading && !emaCross && !overview" :description="emptyMessage" />
+        <!-- 高置信度低估做多 -->
+        <template v-if="dailyPicks && mainTab === 'picks'">
+          <div class="card section" style="margin-bottom: 16px">
+            <div class="section-header">
+              <span class="section-title">高置信度低估做多机会</span>
+              <span class="section-badge green">低估 + 涨潮 + 回调 + 评分≥70</span>
+            </div>
+            <div class="pick-note">
+              <span>筛选逻辑：晨星低估 + 周线涨潮 + 日线回调 + 6因子评分≥70</span>
+            </div>
+            <div class="stock-table">
+              <div
+                v-for="(item, i) in dailyPicks"
+                :key="item.code"
+                class="stock-row"
+                @click="goDetail(item)"
+              >
+                <span class="row-rank mono">{{ i + 1 }}</span>
+                <span class="row-ticker mono">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+                <span class="row-name">${{ item.close }}</span>
+                <div class="row-badges">
+                  <span class="badge badge-green">折价 {{ item.discount_pct }}%</span>
+                  <span v-if="item.ripple_rsi != null" class="badge" :class="item.ripple_rsi < 40 ? 'badge-green' : 'badge-gray'">RSI {{ item.ripple_rsi }}</span>
+                  <span class="badge badge-gray">{{ item.signal }}</span>
+                </div>
+                <span :class="scorePillClass(item.score)" class="score-pill">{{ item.score.toFixed(1) }}</span>
+              </div>
+              <a-empty v-if="dailyPicks.length === 0" description="今日无符合条件的标的（好信号：说明当前没有好机会）" style="padding: 16px 0" />
+            </div>
+            <div class="sr-footer" style="padding: 0 16px 12px">{{ dailyPicksDate }}</div>
+          </div>
+        </template>
+
+        <a-empty v-else-if="!loading && !emaCross && !overview && !dailyPicks.length" :description="emptyMessage" />
       </div>
     </a-spin>
   </div>
@@ -181,7 +217,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getScoresOverview, getEmaCrossSignals } from '../api/trader'
+import { getScoresOverview, getEmaCrossSignals, getDailyPicks } from '../api/trader'
 
 const router = useRouter()
 const selectedDate = ref(null)
@@ -189,6 +225,8 @@ const loading = ref(true)
 const overview = ref(null)
 const emptyMessage = ref('暂无数据')
 const emaCross = ref(null)
+const dailyPicks = ref([])
+const dailyPicksDate = ref('')
 const mainTab = ref('bull')
 const emaTab = ref('4h')
 
@@ -253,9 +291,10 @@ async function loadData() {
   overview.value = null
   try {
     const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
-    const [overviewRes, emaRes] = await Promise.all([
+    const [overviewRes, emaRes, picksRes] = await Promise.all([
       getScoresOverview(dateStr),
       getEmaCrossSignals(dateStr),
+      getDailyPicks(dateStr),
     ])
     const d = overviewRes.data
     if (d && d.data === null) {
@@ -264,6 +303,8 @@ async function loadData() {
       overview.value = d
     }
     emaCross.value = emaRes.data
+    dailyPicks.value = picksRes.data.picks || []
+    dailyPicksDate.value = picksRes.data.date ? `数据日期：${picksRes.data.date}` : ''
   } catch {
     emptyMessage.value = '获取数据失败'
   } finally {
@@ -455,6 +496,13 @@ onMounted(loadData)
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+}
+.pick-note {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .score-pill {
   font-size: 12px;

@@ -50,11 +50,19 @@ export const getBacktestRun = (params) =>
   client.get('/api/backtest/run', { params, timeout: 30000 })
 
 // ── 技术分析（支撑/压力位 + 形态 + 趋势）──
-export const getAnalysis = (code, ktype = '1d') =>
-  client.get('/api/analysis', { params: { code, ktype } })
+export const getAnalysis = (code, date, ktype = '1d') =>
+  client.get('/api/analysis', { params: { code, ktype, ...(date ? { date } : {}) } })
 
 // ── 交易信号（顶/底背离）──
 export const getTradeSignals = (code, date) =>
   client.get('/api/trade-signals', { params: { code, ...(date ? { date } : {}) } })
 export const getBottomSignals = (code, days = 7) =>
   client.get('/api/bottom-signals', { params: { code, days } })
+
+// ── 基本面估值 ──
+export const getFundamental = (code, date) =>
+  client.get('/api/fundamental', { params: { code, ...(date ? { date } : {}) } })
+
+// ── 每日优选（巴菲特原则做多）──
+export const getDailyPicks = (date) =>
+  client.get('/api/daily-picks', { params: { ...(date ? { date } : {}) }, timeout: 30000 })
