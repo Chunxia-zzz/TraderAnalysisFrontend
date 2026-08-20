@@ -37,11 +37,6 @@ const routes = [
     component: () => import('../views/WatchlistManage.vue'),
   },
   {
-    path: '/content-generator',
-    name: 'content-generator',
-    component: () => import('../views/ContentGenerator.vue'),
-  },
-  {
     path: '/review',
     name: 'review',
     component: () => import('../views/Review.vue'),

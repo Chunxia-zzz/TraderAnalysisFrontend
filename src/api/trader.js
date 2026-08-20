@@ -77,3 +77,8 @@ export const getContentGenerator = (code, platform, date) =>
 // ── 市场复盘报告 ──
 export const getReview = (type, date) =>
   client.get('/api/review', { params: { type, ...(date ? { date } : {}) }, timeout: 30000 })
+
+// ── 内容模板管理 ──
+export const listContentTemplates = () => client.get('/api/content-templates')
+export const saveContentTemplate = (key, payload) =>
+  client.put(`/api/content-templates/${key}`, payload)
