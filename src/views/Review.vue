@@ -148,7 +148,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { getReview, getContentGenerator, listContentTemplates, saveContentTemplate } from '../api/trader'
+import { getReview, getContentGenerator, listContentTemplates, saveContentTemplate, deleteContentTemplate } from '../api/trader'
 
 const reviewType = ref('daily')
 const review = ref(null)
@@ -288,9 +288,17 @@ async function saveTemplate() {
   }
 }
 
-function resetTemplate() {
-  // 清空本地编辑，重新从默认拉取（删除 DB 记录即回退默认）
-  message.info('恢复默认需删除 DB 记录，暂支持手动改回；可复制默认模板')
+async function resetTemplate() {
+  try {
+    await deleteContentTemplate(editingKey.value)
+    message.success('已恢复默认模板')
+    const res = await listContentTemplates()
+    templateList.value = res.data?.templates || []
+    const cur = templateList.value.find((t) => t.key === editingKey.value)
+    if (cur) selectTemplate(cur)
+  } catch (e) {
+    message.error('恢复失败：' + (e.response?.data?.message || e.message))
+  }
 }
 
 onMounted(loadReview)

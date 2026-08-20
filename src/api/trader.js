@@ -82,3 +82,4 @@ export const getReview = (type, date) =>
 export const listContentTemplates = () => client.get('/api/content-templates')
 export const saveContentTemplate = (key, payload) =>
   client.put(`/api/content-templates/${key}`, payload)
+export const deleteContentTemplate = (key) => client.delete(`/api/content-templates/${key}`)
