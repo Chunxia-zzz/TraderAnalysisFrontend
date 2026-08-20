@@ -36,6 +36,11 @@ const routes = [
     name: 'watchlist-manage',
     component: () => import('../views/WatchlistManage.vue'),
   },
+  {
+    path: '/content-generator',
+    name: 'content-generator',
+    component: () => import('../views/ContentGenerator.vue'),
+  },
 ]
 
 const router = createRouter({

@@ -66,3 +66,10 @@ export const getFundamental = (code, date) =>
 // ── 每日优选（巴菲特原则做多）──
 export const getDailyPicks = (date) =>
   client.get('/api/daily-picks', { params: { ...(date ? { date } : {}) }, timeout: 30000 })
+
+// ── 自媒体文案生成 ──
+export const getContentGenerator = (code, platform, date) =>
+  client.get('/api/content-generator', {
+    params: { code, ...(platform ? { platform } : {}), ...(date ? { date } : {}) },
+    timeout: 30000,
+  })
