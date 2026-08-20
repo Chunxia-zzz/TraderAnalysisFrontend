@@ -41,6 +41,11 @@ const routes = [
     name: 'content-generator',
     component: () => import('../views/ContentGenerator.vue'),
   },
+  {
+    path: '/review',
+    name: 'review',
+    component: () => import('../views/Review.vue'),
+  },
 ]
 
 const router = createRouter({

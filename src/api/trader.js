@@ -73,3 +73,7 @@ export const getContentGenerator = (code, platform, date) =>
     params: { code, ...(platform ? { platform } : {}), ...(date ? { date } : {}) },
     timeout: 30000,
   })
+
+// ── 市场复盘报告 ──
+export const getReview = (type, date) =>
+  client.get('/api/review', { params: { type, ...(date ? { date } : {}) }, timeout: 30000 })
