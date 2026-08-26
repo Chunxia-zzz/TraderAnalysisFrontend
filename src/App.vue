@@ -20,6 +20,7 @@
               </template>
             </a-dropdown>
             <router-link to="/backtest" class="nav-item">信号回测</router-link>
+            <router-link to="/position" class="nav-item">我的持仓</router-link>
             <router-link to="/review" class="nav-item">市场复盘</router-link>
             <router-link to="/watchlist-manage" class="nav-item">标的管理</router-link>
             <span class="health-dot" :class="healthOk ? 'online' : 'offline'" :title="healthOk ? '后端在线' : '后端离线'" />

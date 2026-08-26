@@ -41,6 +41,11 @@ const routes = [
     name: 'review',
     component: () => import('../views/Review.vue'),
   },
+  {
+    path: '/position',
+    name: 'position',
+    component: () => import('../views/Position.vue'),
+  },
 ]
 
 const router = createRouter({
