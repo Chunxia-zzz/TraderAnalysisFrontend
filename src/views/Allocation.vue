@@ -1,0 +1,293 @@
+<template>
+  <div>
+    <!-- 工具栏 -->
+    <div class="card toolbar" style="margin-bottom: 16px">
+      <div class="toolbar-left">
+        <div class="env-tabs">
+          <span class="env-tab" :class="{ active: env === 'REAL' }" @click="switchEnv('REAL')">实盘</span>
+          <span class="env-tab" :class="{ active: env === 'SIMULATE' }" @click="switchEnv('SIMULATE')">模拟盘</span>
+        </div>
+        <a-button type="primary" size="small" @click="loadAllocation" :loading="loading">🔄 刷新</a-button>
+        <a-button size="small" @click="openEdit">编辑目标</a-button>
+        <span v-if="data?.timestamp" class="update-time mono">更新于 {{ data.timestamp }}</span>
+      </div>
+      <div class="toolbar-stats" v-if="data">
+        <span class="stat-chip gray">总资产 ${{ fmt(data.total_assets) }}</span>
+      </div>
+    </div>
+
+    <a-spin :spinning="loading">
+      <template v-if="data">
+        <!-- 三大类概览 -->
+        <div class="summary-grid" style="margin-bottom: 16px">
+          <div v-for="g in data.groups" :key="g.key" class="card group-card">
+            <div class="group-head">
+              <span class="group-label">{{ g.label }}</span>
+              <span class="group-pct mono">{{ g.weight }}%</span>
+            </div>
+            <div class="group-bar">
+              <div class="group-bar-fill" :style="{ width: barWidth(g) + '%' }" :class="g.key"></div>
+            </div>
+            <div class="group-meta">
+              <span class="meta-item">目标 <b class="mono">${{ fmt(g.target_value) }}</b></span>
+              <span class="meta-item">实际 <b class="mono">${{ fmt(g.actual_value) }}</b></span>
+              <span class="meta-item" :class="g.gap >= 0 ? 'down' : 'up'">
+                差距 <b class="mono">{{ g.gap >= 0 ? '+' : '' }}{{ fmt(g.gap) }}</b>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 分组标的明细 -->
+        <div v-for="g in data.groups" :key="g.key" class="card section" style="margin-bottom: 16px">
+          <div class="section-header">
+            <span class="section-title">{{ g.label }}（目标 {{ g.weight }}%）</span>
+            <span class="section-hint">目标 ${{ fmt(g.target_value) }} · 实际 ${{ fmt(g.actual_value) }} · 差 {{ fmt(g.gap) }}</span>
+          </div>
+          <div class="alloc-table">
+            <div class="alloc-head">
+              <span>标的</span><span>目标%</span><span>目标$</span><span>实际$</span><span>差距</span><span>评分</span><span>RSI</span><span>建议</span>
+            </div>
+            <div v-for="i in g.items" :key="i.code" class="alloc-row">
+              <span class="a-code">
+                <b class="mono">{{ i.code.replace('US.', '').replace('HK.', '') }}</b>
+                <em>{{ i.name }}</em>
+              </span>
+              <span class="mono">{{ i.weight }}%</span>
+              <span class="mono">{{ fmt(i.target_value) }}</span>
+              <span class="mono" :class="i.actual_value > 0 ? 'up' : ''">{{ i.actual_value > 0 ? fmt(i.actual_value) : '—' }}</span>
+              <span class="mono" :class="i.gap >= 0 ? 'down' : 'up'">{{ i.gap >= 0 ? '+' : '' }}{{ fmt(i.gap) }}</span>
+              <span class="mono" :class="scoreClass(i.score)">{{ i.score ?? '—' }}</span>
+              <span class="mono" :class="rsiClass(i.rsi)">{{ i.rsi ?? '—' }}</span>
+              <span class="advice" :class="'lv-' + i.level">{{ i.action }}<em v-if="i.reasons.length">（{{ i.reasons.join('、') }}）</em></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 加仓优先级 -->
+        <div class="card section" v-if="data.buy_priority?.length">
+          <div class="section-header">
+            <span class="section-title">加仓优先级（未达目标，按金额排序）</span>
+            <span class="section-hint">低估或情绪低时优先买入</span>
+          </div>
+          <div class="priority-list">
+            <div v-for="(i, idx) in data.buy_priority" :key="i.code" class="priority-row">
+              <span class="pri-rank mono">{{ idx + 1 }}</span>
+              <span class="pri-code mono">{{ i.code.replace('US.', '').replace('HK.', '') }}</span>
+              <span class="pri-name">{{ i.name }}</span>
+              <span class="pri-gap mono down">+${{ fmt(i.gap) }}</span>
+              <span class="advice" :class="'lv-' + i.level">{{ i.action }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+      <a-empty v-else-if="!loading" description="点击「刷新」获取目标仓位对比" style="padding: 60px 0" />
+    </a-spin>
+
+    <!-- 编辑目标配置 -->
+    <a-modal v-model:open="editVisible" title="编辑目标仓位" :width="560" :footer="null">
+      <div class="edit-form">
+        <div v-for="(g, gi) in editGroups" :key="g.key" class="edit-group">
+          <div class="edit-group-head">
+            <span class="edit-group-label">{{ g.label }}</span>
+            <span class="edit-group-weight">组权重
+              <a-input-number v-model:value="g.weight" :min="0" :max="100" size="small" style="width: 70px" />%
+            </span>
+          </div>
+          <div class="edit-items">
+            <div v-for="(item, ii) in g.items" :key="item.code" class="edit-item">
+              <span class="mono edit-code">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+              <a-input-number v-model:value="item.weight" :min="0" :max="100" size="small" style="width: 70px" />
+              <span class="edit-unit">%</span>
+            </div>
+            <div class="edit-sum" :class="groupSum(g) !== g.weight ? 'down' : ''">
+              组内合计 {{ groupSum(g) }}%（须等于组权重 {{ g.weight }}%）
+            </div>
+          </div>
+        </div>
+        <div class="edit-total" :class="totalWeight() !== 100 ? 'down' : ''">
+          三大类合计：{{ totalWeight() }}%（须 = 100%）
+        </div>
+        <div class="edit-actions">
+          <a-button type="primary" @click="saveEdit" :loading="saving" :disabled="totalWeight() !== 100">保存配置</a-button>
+          <a-button @click="editVisible = false">取消</a-button>
+        </div>
+      </div>
+    </a-modal>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
+import { getAllocation, saveAllocationConfig } from '../api/trader'
+
+const env = ref('REAL')
+const data = ref(null)
+const loading = ref(false)
+const editVisible = ref(false)
+const editGroups = ref([])
+const saving = ref(false)
+
+function fmt(v) {
+  if (v === null || v === undefined) return '-'
+  return Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+}
+
+function barWidth(g) {
+  const max = Math.max(g.target_value, g.actual_value, 1)
+  return Math.min(100, g.actual_value / max * 100)
+}
+function scoreClass(s) {
+  if (s === null || s === undefined) return ''
+  return s >= 80 ? 'up' : s >= 60 ? '' : 'down'
+}
+function rsiClass(r) {
+  if (r === null || r === undefined) return ''
+  return r < 40 ? 'up' : r > 70 ? 'down' : ''
+}
+function groupSum(g) {
+  return g.items.reduce((s, i) => s + (Number(i.weight) || 0), 0)
+}
+function totalWeight() {
+  return editGroups.value.reduce((s, g) => s + (Number(g.weight) || 0), 0)
+}
+
+async function loadAllocation() {
+  loading.value = true
+  try {
+    const res = await getAllocation(env.value)
+    if (res.data?.data) {
+      data.value = res.data.data
+    } else {
+      message.warning(res.data?.message || '获取失败')
+      data.value = null
+    }
+  } catch (e) {
+    message.error('获取失败：' + (e.response?.data?.message || e.message))
+  } finally {
+    loading.value = false
+  }
+}
+
+function switchEnv(e) {
+  if (env.value === e) return
+  env.value = e
+  loadAllocation()
+}
+
+function openEdit() {
+  if (!data.value) {
+    message.warning('请先刷新数据')
+    return
+  }
+  // 深拷贝当前配置结构（权重来自目标配置）
+  editGroups.value = JSON.parse(JSON.stringify(data.value.groups.map((g) => ({
+    key: g.key, label: g.label, weight: g.weight,
+    items: g.items.map((i) => ({ code: i.code, weight: i.weight })),
+  }))))
+  editVisible.value = true
+}
+
+async function saveEdit() {
+  saving.value = true
+  try {
+    const payload = { groups: editGroups.value, note: '永久投资组合：美股+黄金+比特币' }
+    const res = await saveAllocationConfig(payload)
+    if (res.data?.data) {
+      message.success('目标配置已保存')
+      editVisible.value = false
+      loadAllocation()
+    } else {
+      message.warning(res.data?.message || '保存失败')
+    }
+  } catch (e) {
+    message.error('保存失败：' + (e.response?.data?.message || e.message))
+  } finally {
+    saving.value = false
+  }
+}
+
+onMounted(loadAllocation)
+</script>
+
+<style scoped>
+.toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; }
+.toolbar-left { display: flex; align-items: center; gap: 10px; }
+.toolbar-stats { display: flex; gap: 8px; }
+.update-time { font-size: 12px; color: var(--text-muted); }
+.stat-chip { font-size: 12px; padding: 3px 10px; border-radius: 12px; font-weight: 500; }
+.stat-chip.gray { color: var(--text-secondary); background: var(--bg-hover); }
+
+.env-tabs { display: flex; gap: 4px; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 2px; }
+.env-tab { padding: 4px 14px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-radius: 4px; transition: background 0.15s, color 0.15s; }
+.env-tab.active { background: var(--text); color: #fff; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.group-card { padding: 16px; }
+.group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.group-label { font-size: 15px; font-weight: 600; color: var(--text); }
+.group-pct { font-size: 20px; font-weight: 700; }
+.group-bar { height: 8px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+.group-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+.group-bar-fill.stock { background: var(--blue); }
+.group-bar-fill.gold { background: var(--accent); }
+.group-bar-fill.btc { background: var(--green); }
+.group-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+.meta-item b { color: var(--text); }
+
+.section { padding: 16px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.section-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.section-hint { font-size: 12px; color: var(--text-muted); }
+
+.alloc-table { display: flex; flex-direction: column; }
+.alloc-head, .alloc-row {
+  display: grid;
+  grid-template-columns: 2fr 0.8fr 1.2fr 1.2fr 1.2fr 0.8fr 0.8fr 2fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+.alloc-head { color: var(--text-muted); font-size: 12px; border-bottom: 1px solid var(--border-subtle); }
+.alloc-row { border-bottom: 1px solid var(--border-subtle); }
+.alloc-row:last-child { border-bottom: none; }
+.alloc-row:hover { background: var(--bg-hover); }
+.a-code { display: flex; flex-direction: column; }
+.a-code b { color: var(--text); }
+.a-code em { font-style: normal; font-size: 11px; color: var(--text-muted); }
+.advice { font-size: 12px; font-weight: 500; }
+.advice em { font-style: normal; font-size: 11px; color: var(--text-muted); }
+.lv-buy { color: var(--green); }
+.lv-watch { color: var(--text-secondary); }
+.lv-hold { color: var(--text-muted); }
+
+.priority-list { display: flex; flex-direction: column; }
+.priority-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border-subtle); font-size: 13px;
+}
+.priority-row:hover { background: var(--bg-hover); }
+.pri-rank { width: 22px; color: var(--text-muted); }
+.pri-code { font-weight: 700; color: var(--text); min-width: 55px; }
+.pri-name { flex: 1; color: var(--text-secondary); font-size: 12px; }
+.pri-gap { font-weight: 600; }
+
+.edit-form { display: flex; flex-direction: column; gap: 16px; }
+.edit-group { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; }
+.edit-group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.edit-group-label { font-size: 14px; font-weight: 600; }
+.edit-group-weight { font-size: 12px; color: var(--text-secondary); }
+.edit-items { display: flex; flex-direction: column; gap: 6px; }
+.edit-item { display: flex; align-items: center; gap: 8px; }
+.edit-code { min-width: 70px; font-weight: 600; color: var(--text); }
+.edit-unit { font-size: 12px; color: var(--text-muted); }
+.edit-sum { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+.edit-total { font-size: 13px; font-weight: 600; }
+.edit-actions { display: flex; gap: 10px; margin-top: 4px; }
+
+@media (max-width: 900px) {
+  .summary-grid { grid-template-columns: 1fr; }
+}
+</style>

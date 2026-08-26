@@ -46,6 +46,11 @@ const routes = [
     name: 'position',
     component: () => import('../views/Position.vue'),
   },
+  {
+    path: '/allocation',
+    name: 'allocation',
+    component: () => import('../views/Allocation.vue'),
+  },
 ]
 
 const router = createRouter({

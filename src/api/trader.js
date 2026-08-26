@@ -87,3 +87,8 @@ export const deleteContentTemplate = (key) => client.delete(`/api/content-templa
 // ── 持仓查询（实时刷新，依赖 OpenD）──
 export const getPosition = (env, currency = 'base') =>
   client.get('/api/position', { params: { env, currency }, timeout: 30000 })
+
+// ── 目标仓位（永久投资组合）──
+export const getAllocation = (env) =>
+  client.get('/api/allocation', { params: { env }, timeout: 30000 })
+export const saveAllocationConfig = (payload) => client.put('/api/allocation', payload, { timeout: 30000 })
