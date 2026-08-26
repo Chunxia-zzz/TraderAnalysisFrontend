@@ -44,7 +44,37 @@
             <span class="section-title">{{ g.label }}（目标 {{ g.weight }}%）</span>
             <span class="section-hint">目标 ${{ fmt(g.target_value) }} · 实际 ${{ fmt(g.actual_value) }} · 差 {{ fmt(g.gap) }}</span>
           </div>
-          <div class="alloc-table">
+
+          <!-- 子类结构（美股分大科技/半导体/灵活板块） -->
+          <template v-if="g.subgroups?.length">
+            <div v-for="sg in g.subgroups" :key="sg.label" class="subgroup">
+              <div class="subgroup-title">
+                <span>{{ sg.label }}</span>
+                <span class="section-hint">目标 {{ sg.weight }}% · 实际 ${{ fmt(sg.actual_value) }}</span>
+              </div>
+              <div class="alloc-table">
+                <div class="alloc-head">
+                  <span>标的</span><span>目标%</span><span>目标$</span><span>实际$</span><span>差距</span><span>评分</span><span>RSI</span><span>建议</span>
+                </div>
+                <div v-for="i in sg.items" :key="i.code" class="alloc-row">
+                  <span class="a-code">
+                    <b class="mono">{{ i.code.replace('US.', '').replace('HK.', '') }}</b>
+                    <em>{{ i.name }}</em>
+                  </span>
+                  <span class="mono">{{ i.weight }}%</span>
+                  <span class="mono">{{ fmt(i.target_value) }}</span>
+                  <span class="mono" :class="i.actual_value > 0 ? 'up' : ''">{{ i.actual_value > 0 ? fmt(i.actual_value) : '—' }}</span>
+                  <span class="mono" :class="i.gap >= 0 ? 'down' : 'up'">{{ i.gap >= 0 ? '+' : '' }}{{ fmt(i.gap) }}</span>
+                  <span class="mono" :class="scoreClass(i.score)">{{ i.score ?? '—' }}</span>
+                  <span class="mono" :class="rsiClass(i.rsi)">{{ i.rsi ?? '—' }}</span>
+                  <span class="advice" :class="'lv-' + i.level">{{ i.action }}<em v-if="i.reasons.length">（{{ i.reasons.join('、') }}）</em></span>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 扁平结构（黄金/比特币） -->
+          <div v-else class="alloc-table">
             <div class="alloc-head">
               <span>标的</span><span>目标%</span><span>目标$</span><span>实际$</span><span>差距</span><span>评分</span><span>RSI</span><span>建议</span>
             </div>
@@ -94,7 +124,26 @@
               <a-input-number v-model:value="g.weight" :min="0" :max="100" size="small" style="width: 70px" />%
             </span>
           </div>
-          <div class="edit-items">
+
+          <!-- 子类结构编辑 -->
+          <template v-if="g.subgroups?.length">
+            <div v-for="(sg, sgi) in g.subgroups" :key="sg.label" class="edit-subgroup">
+              <div class="edit-subgroup-title">{{ sg.label }}（{{ sg.weight }}%）</div>
+              <div class="edit-items">
+                <div v-for="(item, ii) in sg.items" :key="item.code" class="edit-item">
+                  <span class="mono edit-code">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
+                  <a-input-number v-model:value="item.weight" :min="0" :max="100" size="small" style="width: 70px" />
+                  <span class="edit-unit">%</span>
+                </div>
+                <div class="edit-sum" :class="sgSum(sg) !== sg.weight ? 'down' : ''">
+                  {{ sg.label }}合计 {{ sgSum(sg) }}%（须等于 {{ sg.weight }}%）
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 扁平结构编辑 -->
+          <div v-else class="edit-items">
             <div v-for="(item, ii) in g.items" :key="item.code" class="edit-item">
               <span class="mono edit-code">{{ item.code.replace('US.', '').replace('HK.', '') }}</span>
               <a-input-number v-model:value="item.weight" :min="0" :max="100" size="small" style="width: 70px" />
@@ -147,7 +196,13 @@ function rsiClass(r) {
   return r < 40 ? 'up' : r > 70 ? 'down' : ''
 }
 function groupSum(g) {
+  if (g.subgroups?.length) {
+    return g.subgroups.reduce((s, sg) => s + sg.items.reduce((x, i) => x + (Number(i.weight) || 0), 0), 0)
+  }
   return g.items.reduce((s, i) => s + (Number(i.weight) || 0), 0)
+}
+function sgSum(sg) {
+  return sg.items.reduce((s, i) => s + (Number(i.weight) || 0), 0)
 }
 function totalWeight() {
   return editGroups.value.reduce((s, g) => s + (Number(g.weight) || 0), 0)
@@ -181,11 +236,19 @@ function openEdit() {
     message.warning('请先刷新数据')
     return
   }
-  // 深拷贝当前配置结构（权重来自目标配置）
-  editGroups.value = JSON.parse(JSON.stringify(data.value.groups.map((g) => ({
-    key: g.key, label: g.label, weight: g.weight,
-    items: g.items.map((i) => ({ code: i.code, weight: i.weight })),
-  }))))
+  // 深拷贝当前配置结构（保留 subgroups）
+  editGroups.value = JSON.parse(JSON.stringify(data.value.groups.map((g) => {
+    const base = { key: g.key, label: g.label, weight: g.weight }
+    if (g.subgroups?.length) {
+      base.subgroups = g.subgroups.map((sg) => ({
+        label: sg.label, weight: sg.weight,
+        items: sg.items.map((i) => ({ code: i.code, weight: i.weight })),
+      }))
+    } else {
+      base.items = g.items.map((i) => ({ code: i.code, weight: i.weight }))
+    }
+    return base
+  })))
   editVisible.value = true
 }
 
@@ -241,6 +304,16 @@ onMounted(loadAllocation)
 .section-title { font-size: 15px; font-weight: 600; color: var(--text); }
 .section-hint { font-size: 12px; color: var(--text-muted); }
 
+.subgroup { margin-bottom: 14px; }
+.subgroup:last-child { margin-bottom: 0; }
+.subgroup-title {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  padding: 6px 10px; margin-bottom: 6px;
+  background: var(--bg-hover); border-radius: 6px;
+}
+.subgroup-title .section-hint { font-weight: 400; }
+
 .alloc-table { display: flex; flex-direction: column; }
 .alloc-head, .alloc-row {
   display: grid;
@@ -262,6 +335,7 @@ onMounted(loadAllocation)
 .lv-buy { color: var(--green); }
 .lv-watch { color: var(--text-secondary); }
 .lv-hold { color: var(--text-muted); }
+.lv-expensive { color: var(--accent); font-weight: 600; }
 
 .priority-list { display: flex; flex-direction: column; }
 .priority-row {
@@ -279,6 +353,9 @@ onMounted(loadAllocation)
 .edit-group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .edit-group-label { font-size: 14px; font-weight: 600; }
 .edit-group-weight { font-size: 12px; color: var(--text-secondary); }
+.edit-subgroup { margin-bottom: 10px; padding: 8px; background: var(--bg-hover); border-radius: 6px; }
+.edit-subgroup:last-child { margin-bottom: 0; }
+.edit-subgroup-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
 .edit-items { display: flex; flex-direction: column; gap: 6px; }
 .edit-item { display: flex; align-items: center; gap: 8px; }
 .edit-code { min-width: 70px; font-weight: 600; color: var(--text); }
