@@ -151,11 +151,23 @@
               <a-input-number v-model:value="g.weight" :min="0" :max="100" size="small" style="width: 70px" />%
             </span>
           </div>
-          <div v-if="g.price_scale" class="edit-range">
-            <span class="edit-range-label">短期区间（现货价，ETF 换算 ×{{ g.price_scale }}）</span>
-            <a-input-number v-model:value="g.short_bottom" :min="0" size="small" style="width: 110px" placeholder="底部" />
-            <span class="edit-unit">~</span>
-            <a-input-number v-model:value="g.short_top" :min="0" size="small" style="width: 110px" placeholder="顶部" />
+          <div v-if="g.calib_etf1" class="edit-range">
+            <div class="edit-calib">
+              <span class="edit-range-label">ETF↔期货校准</span>
+              <a-input-number v-model:value="g.calib_etf1" :min="0" size="small" style="width: 80px" />
+              <span class="edit-unit">→</span>
+              <a-input-number v-model:value="g.calib_fut1" :min="0" size="small" style="width: 100px" />
+              <span class="edit-unit">│</span>
+              <a-input-number v-model:value="g.calib_etf2" :min="0" size="small" style="width: 80px" />
+              <span class="edit-unit">→</span>
+              <a-input-number v-model:value="g.calib_fut2" :min="0" size="small" style="width: 100px" />
+            </div>
+            <div class="edit-calib">
+              <span class="edit-range-label">短期区间</span>
+              <a-input-number v-model:value="g.short_bottom" :min="0" size="small" style="width: 100px" placeholder="底部" />
+              <span class="edit-unit">~</span>
+              <a-input-number v-model:value="g.short_top" :min="0" size="small" style="width: 100px" placeholder="顶部" />
+            </div>
           </div>
 
           <!-- 子类结构编辑 -->
@@ -272,8 +284,11 @@ function openEdit() {
   // 深拷贝当前配置结构（保留 subgroups / 现货区间）
   editGroups.value = JSON.parse(JSON.stringify(data.value.groups.map((g) => {
     const base = { key: g.key, label: g.label, weight: g.weight }
-    if (g.price_scale) {
-      base.price_scale = g.price_scale
+    if (g.calib_etf1) {
+      base.calib_etf1 = g.calib_etf1
+      base.calib_fut1 = g.calib_fut1
+      base.calib_etf2 = g.calib_etf2
+      base.calib_fut2 = g.calib_fut2
       base.short_bottom = g.short_bottom
       base.short_top = g.short_top
     }
@@ -415,8 +430,9 @@ onMounted(loadAllocation)
 .edit-group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .edit-group-label { font-size: 14px; font-weight: 600; }
 .edit-group-weight { font-size: 12px; color: var(--text-secondary); }
-.edit-range { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
-.edit-range-label { margin-right: 4px; }
+.edit-range { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.edit-calib { display: flex; align-items: center; gap: 6px; }
+.edit-range-label { min-width: 80px; }
 .edit-subgroup { margin-bottom: 10px; padding: 8px; background: var(--bg-hover); border-radius: 6px; }
 .edit-subgroup:last-child { margin-bottom: 0; }
 .edit-subgroup-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
