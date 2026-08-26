@@ -413,6 +413,13 @@ onMounted(loadAllocation)
 .lv-watch { color: var(--text-secondary); }
 .lv-hold { color: var(--text-muted); }
 .lv-expensive { color: var(--accent); font-weight: 600; }
+.lv-strong_buy {
+  color: var(--green);
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--green-bg);
+}
 
 .priority-list { display: flex; flex-direction: column; }
 .priority-row {
