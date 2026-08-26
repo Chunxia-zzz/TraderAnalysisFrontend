@@ -85,5 +85,5 @@ export const saveContentTemplate = (key, payload) =>
 export const deleteContentTemplate = (key) => client.delete(`/api/content-templates/${key}`)
 
 // ── 持仓查询（实时刷新，依赖 OpenD）──
-export const getPosition = (env) =>
-  client.get('/api/position', { params: { env }, timeout: 30000 })
+export const getPosition = (env, currency = 'base') =>
+  client.get('/api/position', { params: { env, currency }, timeout: 30000 })

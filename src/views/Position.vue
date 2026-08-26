@@ -4,8 +4,12 @@
     <div class="card toolbar" style="margin-bottom: 16px">
       <div class="toolbar-left">
         <div class="env-tabs">
-          <span class="env-tab" :class="{ active: env === 'REAL' }" @click="env = 'REAL'">实盘</span>
-          <span class="env-tab" :class="{ active: env === 'SIMULATE' }" @click="env = 'SIMULATE'">模拟盘</span>
+          <span class="env-tab" :class="{ active: env === 'REAL' }" @click="switchEnv('REAL')">实盘</span>
+          <span class="env-tab" :class="{ active: env === 'SIMULATE' }" @click="switchEnv('SIMULATE')">模拟盘</span>
+        </div>
+        <div class="env-tabs currency-tabs">
+          <span class="env-tab" :class="{ active: currency === 'base' }" @click="switchCurrency('base')">本币</span>
+          <span class="env-tab" :class="{ active: currency === 'USD' }" @click="switchCurrency('USD')">美元</span>
         </div>
         <a-button type="primary" size="small" @click="loadPosition" :loading="loading">
           <template v-if="!loading">🔄 查询持仓</template>
@@ -14,7 +18,7 @@
         <span v-if="data?.timestamp" class="update-time mono">更新于 {{ data.timestamp }}</span>
       </div>
       <div class="toolbar-stats" v-if="data">
-        <span class="stat-chip gray">{{ data.base_currency }}</span>
+        <span class="stat-chip gray">{{ data.display_currency }}</span>
         <span class="stat-chip" :class="data.cash_pct >= 50 ? 'gray' : 'green'">现金 {{ data.cash_pct }}%</span>
       </div>
     </div>
@@ -57,7 +61,7 @@
               <span class="c-qty">股数</span>
               <span class="c-num">成本</span>
               <span class="c-num">现价</span>
-              <span class="c-num">市值({{ data.base_currency }})</span>
+              <span class="c-num">市值({{ data.display_currency }})</span>
               <span class="c-pct">占比</span>
               <span class="c-pct">盈亏</span>
             </div>
@@ -69,7 +73,7 @@
               <span class="c-qty mono">{{ p.qty }}</span>
               <span class="c-num mono">{{ p.cost_price }}</span>
               <span class="c-num mono">{{ p.price }}</span>
-              <span class="c-num mono">{{ fmt(p.market_value_hkd) }}</span>
+              <span class="c-num mono">{{ fmt(p.market_value) }}</span>
               <span class="c-pct mono" :class="p.weight_pct >= 0 ? 'up' : 'down'">{{ p.weight_pct }}%</span>
               <span class="c-pct mono" :class="p.pl_pct >= 0 ? 'up' : 'down'">{{ p.pl_pct >= 0 ? '+' : '' }}{{ p.pl_pct }}%</span>
             </div>
@@ -88,6 +92,7 @@ import { message } from 'ant-design-vue'
 import { getPosition } from '../api/trader'
 
 const env = ref('REAL')
+const currency = ref('base')
 const data = ref(null)
 const loading = ref(false)
 
@@ -99,7 +104,7 @@ function fmt(v) {
 async function loadPosition() {
   loading.value = true
   try {
-    const res = await getPosition(env.value)
+    const res = await getPosition(env.value, currency.value)
     if (res.data?.data) {
       data.value = res.data.data
     } else {
@@ -111,6 +116,18 @@ async function loadPosition() {
   } finally {
     loading.value = false
   }
+}
+
+function switchEnv(e) {
+  if (env.value === e) return
+  env.value = e
+  loadPosition()
+}
+
+function switchCurrency(c) {
+  if (currency.value === c) return
+  currency.value = c
+  loadPosition()
 }
 
 onMounted(loadPosition)
@@ -126,6 +143,7 @@ onMounted(loadPosition)
 .stat-chip.gray { color: var(--text-secondary); background: var(--bg-hover); }
 
 .env-tabs { display: flex; gap: 4px; border: 1px solid var(--border-subtle); border-radius: 6px; padding: 2px; }
+.currency-tabs { margin-left: 4px; }
 .env-tab { padding: 4px 14px; font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-radius: 4px; transition: background 0.15s, color 0.15s; }
 .env-tab.active { background: var(--text); color: #fff; }
 
