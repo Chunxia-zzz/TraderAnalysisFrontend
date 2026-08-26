@@ -45,6 +45,33 @@
             <span class="section-hint">目标 ${{ fmt(g.target_value) }} · 实际 ${{ fmt(g.actual_value) }} · 差 {{ fmt(g.gap) }}</span>
           </div>
 
+          <!-- 分批加仓计划 -->
+          <div v-if="g.batch_plan" class="batch-plan">
+            <div class="bp-header">
+              <span>当前现货 ≈ <b class="mono">{{ fmt(g.batch_plan.current_spot) }}</b></span>
+              <span>区间位置 {{ g.batch_plan.position_pct }}%</span>
+              <span :class="g.batch_plan.exec_pct > 0 ? 'up' : ''">
+                可执行 {{ g.batch_plan.exec_pct }}% ≈ ${{ fmt(g.batch_plan.exec_amount) }}
+              </span>
+            </div>
+            <div class="bp-range">
+              <span class="bp-end mono">{{ fmt(g.batch_plan.bottom) }}</span>
+              <div class="bp-bar">
+                <div class="bp-fill" :style="{ width: g.batch_plan.position_pct + '%' }"></div>
+                <div class="bp-marker" :style="{ left: g.batch_plan.position_pct + '%' }">▼</div>
+              </div>
+              <span class="bp-end mono">{{ fmt(g.batch_plan.top) }}</span>
+            </div>
+            <div class="bp-tiers">
+              <div v-for="t in g.batch_plan.tiers" :key="t.tier" class="bp-tier" :class="{ ok: t.executable }">
+                <span class="mono">批{{ t.tier }} [{{ t.price_range }}]</span>
+                <span>买 {{ t.pct }}%</span>
+                <span class="mono">${{ fmt(t.amount) }}</span>
+                <span class="bp-status">{{ t.executable ? '✅ 可买' : '⏳ 等回调' }}</span>
+              </div>
+            </div>
+          </div>
+
           <!-- 子类结构（美股分大科技/半导体/灵活板块） -->
           <template v-if="g.subgroups?.length">
             <div v-for="sg in g.subgroups" :key="sg.label" class="subgroup">
@@ -123,6 +150,12 @@
             <span class="edit-group-weight">组权重
               <a-input-number v-model:value="g.weight" :min="0" :max="100" size="small" style="width: 70px" />%
             </span>
+          </div>
+          <div v-if="g.price_scale" class="edit-range">
+            <span class="edit-range-label">短期区间（现货价，ETF 换算 ×{{ g.price_scale }}）</span>
+            <a-input-number v-model:value="g.short_bottom" :min="0" size="small" style="width: 110px" placeholder="底部" />
+            <span class="edit-unit">~</span>
+            <a-input-number v-model:value="g.short_top" :min="0" size="small" style="width: 110px" placeholder="顶部" />
           </div>
 
           <!-- 子类结构编辑 -->
@@ -236,9 +269,14 @@ function openEdit() {
     message.warning('请先刷新数据')
     return
   }
-  // 深拷贝当前配置结构（保留 subgroups）
+  // 深拷贝当前配置结构（保留 subgroups / 现货区间）
   editGroups.value = JSON.parse(JSON.stringify(data.value.groups.map((g) => {
     const base = { key: g.key, label: g.label, weight: g.weight }
+    if (g.price_scale) {
+      base.price_scale = g.price_scale
+      base.short_bottom = g.short_bottom
+      base.short_top = g.short_top
+    }
     if (g.subgroups?.length) {
       base.subgroups = g.subgroups.map((sg) => ({
         label: sg.label, weight: sg.weight,
@@ -314,6 +352,30 @@ onMounted(loadAllocation)
 }
 .subgroup-title .section-hint { font-weight: 400; }
 
+.batch-plan {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: var(--bg);
+}
+.bp-header { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+.bp-header b { color: var(--text); }
+.bp-range { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bp-end { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.bp-bar { position: relative; flex: 1; height: 8px; background: var(--border-subtle); border-radius: 4px; }
+.bp-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--accent)); border-radius: 4px; }
+.bp-marker { position: absolute; top: -7px; transform: translateX(-50%); font-size: 12px; color: var(--text); }
+.bp-tiers { display: flex; flex-direction: column; gap: 4px; }
+.bp-tier {
+  display: grid; grid-template-columns: 1.2fr 0.6fr 1fr 0.8fr;
+  gap: 10px; padding: 6px 10px; font-size: 12px;
+  border-radius: 6px; background: var(--bg-card);
+  color: var(--text-secondary);
+}
+.bp-tier.ok { background: var(--green-bg); color: var(--green); font-weight: 500; }
+.bp-status { text-align: right; }
+
 .alloc-table { display: flex; flex-direction: column; }
 .alloc-head, .alloc-row {
   display: grid;
@@ -353,6 +415,8 @@ onMounted(loadAllocation)
 .edit-group-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .edit-group-label { font-size: 14px; font-weight: 600; }
 .edit-group-weight { font-size: 12px; color: var(--text-secondary); }
+.edit-range { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: var(--text-secondary); }
+.edit-range-label { margin-right: 4px; }
 .edit-subgroup { margin-bottom: 10px; padding: 8px; background: var(--bg-hover); border-radius: 6px; }
 .edit-subgroup:last-child { margin-bottom: 0; }
 .edit-subgroup-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
