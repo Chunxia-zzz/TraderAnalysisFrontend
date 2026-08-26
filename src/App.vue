@@ -20,9 +20,16 @@
               </template>
             </a-dropdown>
             <router-link to="/backtest" class="nav-item">信号回测</router-link>
-            <router-link to="/position" class="nav-item">我的持仓</router-link>
-            <router-link to="/allocation" class="nav-item">目标仓位</router-link>
-            <router-link to="/review" class="nav-item">市场复盘</router-link>
+            <a-dropdown>
+              <span class="nav-item nav-dropdown" :class="{ active: isPositionRoute }">持仓配置 ▾</span>
+              <template #overlay>
+                <a-menu @click="handleMenuClick">
+                  <a-menu-item key="/position">我的持仓</a-menu-item>
+                  <a-menu-item key="/allocation">目标仓位</a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+            <router-link to="/review" class="nav-item">市场复盘 <span class="beta-tag">beta</span></router-link>
             <router-link to="/watchlist-manage" class="nav-item">标的管理</router-link>
             <span class="health-dot" :class="healthOk ? 'online' : 'offline'" :title="healthOk ? '后端在线' : '后端离线'" />
           </nav>
@@ -48,6 +55,9 @@ const healthOk = ref(false)
 
 const stockRoutes = ['/dashboard', '/chart']
 const isStockRoute = computed(() => stockRoutes.includes(route.path))
+
+const positionRoutes = ['/position', '/allocation']
+const isPositionRoute = computed(() => positionRoutes.includes(route.path))
 
 function handleMenuClick({ key }) {
   router.push(key)
@@ -163,6 +173,19 @@ body {
   border-radius: 50%;
   display: inline-block;
   margin-left: 8px;
+}
+
+.beta-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-bg);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 2px;
+  vertical-align: 1px;
+  line-height: 1.4;
 }
 
 .health-dot.online  { background: var(--green); }
