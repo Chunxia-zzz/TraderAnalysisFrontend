@@ -167,6 +167,12 @@
                   <span v-if="item.above_ma5" class="badge badge-green">MA5上</span>
                   <span v-else class="badge badge-gray">MA5下</span>
                   <span v-if="item.ema_ribbon === 'red'" class="badge badge-red">空头带</span>
+                  <span class="badge" :class="item.dd60_ok ? 'badge-green' : 'badge-red'" :title="'60日跌幅（需<30%）'">
+                    {{ item.dd60_pct != null ? '跌幅' + item.dd60_pct + '%' : '跌幅—' }}
+                  </span>
+                  <span class="badge" :class="msBadgeClass(item)" :title="'与晨星公允价值比较'">
+                    {{ msBadgeText(item) }}
+                  </span>
                 </div>
                 <span class="check-badge" :class="'lv-' + checkLevel(item)" :title="checkTitle(item)">
                   {{ checkCount(item) }}/3
@@ -277,6 +283,17 @@ function checkTitle(item) {
   parts.push('② 晨星' + (item.ms_discount_pct != null ? (item.ms_discount_pct >= 0 ? '低估' + item.ms_discount_pct + '%' : '溢价' + (-item.ms_discount_pct) + '%') : '—') + (item.ms_undervalued ? ' ✓' : ' ✗'))
   parts.push('③ 评分' + (item.total_score ?? '—') + (item.total_score >= 80 ? ' STRONG ✓' : ' <80'))
   return parts.join('\n')
+}
+
+/** 晨星折价徽章：低估绿 / 溢价红 */
+function msBadgeText(item) {
+  if (item.ms_discount_pct == null) return '估值—'
+  const v = Math.abs(item.ms_discount_pct)
+  return item.ms_discount_pct >= 0 ? `低估${v}%` : `溢价${v}%`
+}
+function msBadgeClass(item) {
+  if (item.ms_discount_pct == null) return 'badge-gray'
+  return item.ms_discount_pct >= 0 ? 'badge-green' : 'badge-red'
 }
 
 /** 空转多信号：按周期过滤 */
