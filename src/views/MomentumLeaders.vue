@@ -145,7 +145,7 @@
           <div class="card section" style="margin-bottom: 16px">
             <div class="section-header">
               <span class="section-title">主跌浪超卖</span>
-              <span class="section-badge green">6因子评分 ≥ 60</span>
+              <span class="section-badge green">6因子评分 ≥ 60 + 3 项检查</span>
             </div>
             <div class="stock-table">
               <div
@@ -168,6 +168,9 @@
                   <span v-else class="badge badge-gray">MA5下</span>
                   <span v-if="item.ema_ribbon === 'red'" class="badge badge-red">空头带</span>
                 </div>
+                <span class="check-badge" :class="'lv-' + checkLevel(item)" :title="checkTitle(item)">
+                  {{ checkCount(item) }}/3
+                </span>
                 <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
               </div>
               <a-empty v-if="oversold.length === 0" description="暂无超卖标的" style="padding: 16px 0" />
@@ -255,6 +258,26 @@ const oversold = computed(() => {
   })
   return items.sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
 })
+
+/** 3 项检查计数：①60日跌幅<30% ②晨星低估 ③评分≥80(STRONG) */
+function checkCount(item) {
+  let n = 0
+  if (item.dd60_ok) n++
+  if (item.ms_undervalued) n++
+  if (item.total_score >= 80) n++
+  return n
+}
+function checkLevel(item) {
+  const n = checkCount(item)
+  return n >= 3 ? 'all' : n === 2 ? 'part' : 'none'
+}
+function checkTitle(item) {
+  const parts = []
+  parts.push('① 跌幅' + (item.dd60_pct != null ? item.dd60_pct + '%' : '—') + (item.dd60_ok ? ' ✓' : ' ✗(需<30%)'))
+  parts.push('② 晨星' + (item.ms_discount_pct != null ? (item.ms_discount_pct >= 0 ? '低估' + item.ms_discount_pct + '%' : '溢价' + (-item.ms_discount_pct) + '%') : '—') + (item.ms_undervalued ? ' ✓' : ' ✗'))
+  parts.push('③ 评分' + (item.total_score ?? '—') + (item.total_score >= 80 ? ' STRONG ✓' : ' <80'))
+  return parts.join('\n')
+}
 
 /** 空转多信号：按周期过滤 */
 const bullFiltered = computed(() => {
@@ -514,4 +537,15 @@ onMounted(loadData)
 .score-pill.high { color: var(--red);     background: var(--red-bg); }
 .score-pill.mid  { color: var(--orange);  background: var(--orange-bg, rgba(255,159,28,0.15)); }
 .score-pill.low  { color: var(--green);   background: var(--green-bg); }
+.check-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.check-badge.lv-all  { color: var(--green);  background: var(--green-bg); }
+.check-badge.lv-part { color: var(--orange); background: var(--orange-bg, rgba(255,159,28,0.15)); }
+.check-badge.lv-none { color: var(--text-muted); background: var(--bg-hover); }
 </style>
