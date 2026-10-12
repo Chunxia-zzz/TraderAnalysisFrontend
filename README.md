@@ -35,6 +35,14 @@ npm run build    # 输出到 dist/ 目录
 npm run preview  # 本地预览生产构建
 ```
 
+> **构建时那条 `chunks are larger than 500 kB` 警告可以忽略** —— 它是 Vite 的默认建议阈值，
+> 不是错误，不影响功能与正确性。主包较大（1531 KB）的根因是 `src/main.js` 全量注册了
+> ant-design-vue（`app.use(Antd)`），tree-shaking 失效；真正解法是改按需导入，但收益与回归风险
+> 不成比例，**暂不处理**。
+>
+> 线上已通过 **Nginx gzip** 把传输量降到 480 KB（整页首屏 1688 KB → 575 KB，省 66%）——
+> 这是服务器配置，与产物大小无关。配置与坑见 `docs/architecture.md` §9.3。
+
 ## 功能页面
 
 | 页面 | 路由 | 说明 |

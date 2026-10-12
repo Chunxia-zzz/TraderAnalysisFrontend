@@ -458,6 +458,21 @@ npm run build   # 生成 dist/ 目录
 
 `dist/` 是纯静态文件，可用 Nginx/Caddy 托管。API 请求需通过反向代理转发到后端。
 
+**线上实际生效的 Nginx 配置**（2026-10-12 新增，完整说明见后端 `README.md` §5）：
+
+| 文件 | 关键内容 |
+|---|---|
+| `/etc/nginx/conf.d/gzip.conf` | `gzip on` + `gzip_types` 含 `application/javascript`（nginx 默认只压 `html`，不写等于没压）+ `gzip_proxied any`（`/api` 也压缩） |
+| `/etc/nginx/conf.d/trader.conf` | `/assets/` → `immutable` 强缓存；`index.html` → `no-cache` |
+
+> ⚠️ 两条改动静态资源时**必须知道**的规则：
+> 1. **`index.html` 必须 `no-cache`** —— 本项目的 chunk 名带内容 hash，若 `index.html` 被启发式缓存住，
+>    新部署后页面仍会请求**已删除的旧 chunk → 白屏**。
+> 2. **不要用 `expires` 指令** —— 它自带 `Cache-Control: max-age=...`，再叠 `add_header Cache-Control` 会输出
+>    两个同名头。只用 `add_header`，并用 `curl -sD- -o/dev/null <url> | grep -ci cache-control` 断言为 1。
+
+实测效果：主包传输 1 531 KB → 480 KB，整页首屏 1 688 KB → **575 KB（省 66%）**。
+
 ### 9.4 端到端验收（零依赖 CDP）
 
 `scripts/` 下是自包含的浏览器验收脚本，用本机 Chrome + Node 内置 WebSocket 驱动，**不装任何 npm 依赖**。
