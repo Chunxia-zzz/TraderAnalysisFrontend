@@ -8,7 +8,7 @@
 
 TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获取行情数据、计算技术指标和评分；前端负责将这些数据以图表和数值面板的形式呈现给用户。
 
-当前监控 **195 只标的**，覆盖 **26 个分类**（实测自 `/api/watchlist`）：
+当前监控 **195 只标的**，覆盖 **26 组分类**（实测自 `/api/watchlist`：25 个具名分类 + 2 只 `category` 为空的标的自成一组）：
 
 - 市场分布：美股 192 + 港股 3（HK.00700 / HK.01211 / HK.03690）
 - 主要分类：financials(27) / consumer(19) / healthcare(18) / tech(14) / industrials(13) / sector_etf(11) / software(9) / mag7(8) / ai_infra(7) / cyclical(7) / commodity(6) / energy(6) / semiconductor(6) / crypto(5) / defensive_consumer(5) / utilities(5) / defensive(4) / market_gold_btc(4) / china_adr(3) / cloud(3) / emerging_market(3) / optical(3) / storage(3) / hk_stock(2) / space(2) / 空值(2)
@@ -17,15 +17,15 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 
 | 场景 | 描述 |
 |------|------|
-| 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议 |
+| 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议；**可在美股大盘 / 黄金 / 比特币三个视图间切换** |
 | 交易信号 | 空转多/多转空（EMA5/30 交叉）+ 主升浪龙头 + 主跌浪超卖 + 低估做多机会 |
 | 利弗莫尔关键点 | **独立信号体系**：整理平台上沿突破/逼近/已在关键点上方/风险四分组，与 6 因子评分方向相反、不合并 |
-| 个股技术分析 | 道氏三层趋势 + 支撑压力关键位 + 形态置信度 + 盈亏比 + 6 因子评分 |
+| 个股技术分析 | 道氏三层趋势 + 支撑压力关键位 + 形态置信度 + 盈亏比 + 6 因子评分 + 基本面估值 |
 | 查看 K 线图 | 选择标的和周期（4H/日K/周K），蜡烛图 + 多窗格指标 + **支撑压力位标注** + **利弗莫尔关键点叠加** |
-| 信号回测 | 3 种策略模式历史回测验证（趋势跟踪/买入持有/波段操作） |
+| 信号回测 | **5 种策略模式**历史回测验证（趋势跟踪/买入持有/波段操作/EMA飘带多头/EMA飘带空头） |
 | 市场复盘 | 日/周复盘报告 + 自媒体文案生成（小红书/知乎/公众号） |
 | 我的持仓 | 实时持仓查询（依赖本机 OpenD） |
-| 目标仓位 | 永久投资组合目标 vs 实际对比 + 四级加仓建议（依赖本机 OpenD） |
+| 目标仓位 | 永久投资组合目标 vs 实际对比 + **五级**加仓建议（依赖本机 OpenD） |
 | 标的池管理 | 增删改查标的，筛选/搜索，晨星折价排序，刷新快照 |
 
 ---
@@ -42,8 +42,13 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 | **LightweightCharts** | ^4.2 | K 线图表（`IndicatorChart.vue`） | TradingView 出品，金融图表开箱即用，体积小 |
 | **ECharts** | ^6.0 | 温度趋势图（`MarketTemperature.vue`） | 通用折线/多轴图表 |
 | **Axios** | ^1.7 | HTTP 客户端 | 拦截器、超时控制、错误统一处理 |
-| **Vue Router** | ^4.4 | 路由 | SPA 页面导航，支持懒加载 + 路由守卫 |
-| **Day.js** | — | 日期处理 | Ant Design Vue DatePicker 依赖 |
+| **Vue Router** | ^4.4 | 路由 | SPA 页面导航，支持懒加载（**无路由守卫** —— 认证已彻底移除，见 §4） |
+| **Day.js** | 1.11.20 | 日期处理 | ⚠️ **不在 `package.json`**：作为 ant-design-vue 的传递依赖被安装，但 `Dashboard.vue:283` 直接 `import dayjs` —— 隐式依赖（见下方注） |
+
+> ⚠️ **隐式依赖提示（2026-10-12 核对）**：`Dashboard.vue:283` 有 `import dayjs from 'dayjs'`（用于把 `?date=` 查询参数转成 DatePicker 的值），
+> 但 `package.json` 的 `dependencies` 里**没有 dayjs**，版本 1.11.20 来自 `node_modules/` 里 ant-design-vue 带上来的那份。
+> 当前 `npm install` / `npm ci` 都会装上它，**功能正常**；但语义上「直接 import 的包应当声明为直接依赖」，
+> 否则一旦上游 ant-design-vue 去掉 dayjs（或改用别的日期库），构建会突然断掉。**建议把 `"dayjs": "^1.11.20"` 补进 `dependencies`**（属代码侧待办，非文档缺陷）。
 
 ### 2.2 图表库的实际使用情况
 
@@ -88,13 +93,13 @@ TraderAnalysisFrontend/
     ├── components/               # 可复用组件
     │   └── IndicatorChart.vue    # lightweight-charts K 线图表组件（唯一组件）
     └── views/                    # 页面（★ = 已在 router 注册）
-        ├── Home.vue              # ★ 首页（价值投资理念）
-        ├── MarketTemperature.vue # ★ 市场温度仪表盘
+        ├── Home.vue              # ★ 首页（价值投资理念 + 主题切换；⚠️ 含一个指向未注册路由 /scores-overview 的按钮）
+        ├── MarketTemperature.vue # ★ 市场温度仪表盘（美股大盘 / 黄金 / 比特币 三视图）
         ├── Chart.vue             # ★ 个股历史K线（支撑压力位 + 利弗莫尔关键点叠加）
         ├── MomentumLeaders.vue   # ★ 交易信号（空转多/多转空/主升浪/主跌浪/低估做多）
         ├── Livermore.vue         # ★ 利弗莫尔关键点（独立信号体系）
         ├── Dashboard.vue         # ★ 个股技术分析
-        ├── Backtest.vue          # ★ 信号回测（3 策略模式）
+        ├── Backtest.vue          # ★ 信号回测（5 种策略模式）
         ├── WatchlistManage.vue   # ★ 标的池管理
         ├── Review.vue            # ★ 市场复盘 + 自媒体文案
         ├── Position.vue          # ★ 我的持仓（依赖 OpenD）
@@ -126,12 +131,12 @@ TraderAnalysisFrontend/
 | 路径 | 组件 | 说明 |
 |------|------|------|
 | `/` | Home.vue | 首页，价值投资理念 |
-| `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘 |
-| `/chart` | Chart.vue | 个股历史K线（含支撑压力位标注） |
+| `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘（含黄金 / 比特币资产温度视图） |
+| `/chart` | Chart.vue | 个股历史K线（含支撑压力位标注 + 利弗莫尔关键点叠加） |
 | `/momentum-leaders` | MomentumLeaders.vue | 交易信号（空转多/多转空、主升浪龙头、主跌浪超卖、低估做多） |
 | `/livermore` | Livermore.vue | 利弗莫尔关键点（独立信号体系；四分组 + 抽屉详情） |
 | `/dashboard` | Dashboard.vue | 个股技术分析 |
-| `/backtest` | Backtest.vue | 信号回测（3 种策略模式） |
+| `/backtest` | Backtest.vue | 信号回测（5 种策略模式） |
 | `/watchlist-manage` | WatchlistManage.vue | 标的池管理 |
 | `/review` | Review.vue | 市场复盘 + 自媒体文案生成 |
 | `/position` | Position.vue | 我的持仓（依赖 OpenD） |
@@ -148,10 +153,14 @@ TraderAnalysisFrontend/
 
 采用**顶部导航栏**布局：
 - Logo 在左侧，导航链接在右侧
-- 浅色主题（白色背景 + 蓝色高亮）
+- 浅色主题（白色背景 `#fff` + **灰底选中态**）。⚠️ **不是「蓝色高亮」**：本项目强调色是深金 `--accent: #946800`，
+  导航选中态用 `--bg-hover` 背景 + `font-weight: 600`，全程无蓝色高亮（见 `App.vue` 的 `.nav-item.router-link-active`）
 - 内容区域最大宽度 1400px 居中
-- 后端状态指示灯（绿/红点）
-- "个股分析"为下拉菜单（**仅 2 项**：个股技术分析 `/dashboard`、个股历史K线 `/chart`。早期文档写的"基本面"入口代码中不存在）
+- 后端状态指示灯（绿/红点，`getHealth()` 轮询一次，`onMounted` 时调用）
+- 导航项顺序：市场温度 / 交易信号（平级链接 → `/momentum-leaders`）/ 利弗莫尔 / **个股分析 ▾** / 信号回测 / **持仓配置 ▾** / 市场复盘（带 `beta` 徽标）/ 标的管理 + 健康指示灯
+- 真正带 ▾ 的下拉**只有 2 个**：
+  - 「个股分析」**仅 2 项**：个股技术分析 `/dashboard`、个股历史K线 `/chart`（早期文档写的"基本面"入口代码中不存在）
+  - 「持仓配置」2 项：我的持仓 `/position`、目标仓位 `/allocation`
 
 ---
 
@@ -159,7 +168,31 @@ TraderAnalysisFrontend/
 
 ### 6.1 Home.vue — 首页
 
-品牌展示页（「持有最好的公司」），价值投资理念 + "查看市场温度"按钮 + 向下滚动区块（核心能力三支柱/市场温度）。无后端 API 调用。
+**无后端 API 调用**（`Home.vue` 的 import 只有 `vue`；页面上的所有数值都是硬编码的展示值）。
+
+**六段式落地页**，源码里用 `<!-- ═══ S1..S6 ═══ -->` 分段标记，与下表一一对应。整页带**暗/浅主题切换**：`isDark` 状态写入 `localStorage.home-theme`，根节点 `.home[data-theme="dark|light"]` 切换。
+
+| 段 | 源码注释 | 内容 | 跳转 |
+|---|---|---|---|
+| S1 | `HERO` | 「持有最好的公司」大标题 + `hero-glow` / `hero-grid` 背景 + 主 CTA | → `/market-temperature` |
+| S2 | `CAPABILITIES` | 核心能力 3 张卡：技术评分 / 市场温度 / 信号回测 | → `/dashboard`、`/market-temperature`、`/backtest` |
+| S3 | `MARKET TEMPERATURE` | 内联 SVG 仪表盘（`linearGradient#gGrad`）+ 三个统计数 | —（纯展示） |
+| S4 | `SCORING RADAR` | 六边形 SVG 雷达图（4 层环 + 3 轴 + 数据多边形），讲 **6 因子评分** | —（纯展示） |
+| S5 | `WORKFLOW` | 工作流程 4 步：数据采集 / 指标计算 / 信号评分 / 执行建议 | — |
+| S6 | `CTA` | 「开始做出更聪明的决策」+ 4 个按钮：市场温度 / **机会速览** / 主升浪龙头 / 信号回测 | 见 §6.4 死链说明 |
+
+> ⚠️ **图形都是手写 SVG，不用图表库**：S3 的仪表与 S4 的雷达图均为内联 `<svg>`，**不走 ECharts / lightweight-charts**（二者只分别用在 MarketTemperature 与 Chart 页）。
+>
+> ⚠️ **S3 的数值是静态演示值**：`gaugeVal` / `bullN` / `neutN` / `bearN` 的注释即写明「仪表盘数值（展示用静态值）」，
+> 滚动进入视口时由 `countUp()` 做一次缓动计数动画（目标 `57 / 14 / 5 / 3`），**与后端真实温度无关**。
+>
+> ⚠️ **S4 的「六维」指 6 因子评分，不是市场温度的维度**：市场温度是**三维 50/35/15**（见 §6.3）；
+> 这里的六边形 6 个顶点对应 `total_score` 的 6 个技术因子。二者不要混为一谈。
+>
+> ⚠️ **S6 的「机会速览」是死链** —— `/scores-overview` 未注册路由，详见 §6.4。
+>
+> ⚠️ 本节此前只写「向下滚动区块（核心能力三支柱/市场温度）」，**漏掉了 S3/S4/S5/S6 四段与主题切换**，
+> 且与 `design-spec-v1-clean-financial.md` §3.7 的「6 段」描述自相矛盾；已按源码补全（2026-10-12）。
 
 ### 6.2 Login.vue — 已不存在（2026-10-12 勘误）
 
@@ -175,30 +208,60 @@ TraderAnalysisFrontend/
 ### 6.3 MarketTemperature.vue — 市场温度仪表盘
 
 **API 调用：**
-- `GET /api/market-temperature` — 最新评分
+- `GET /api/market-temperature` — 最新评分（美股大盘）
 - `GET /api/market-temperature/history?days=60` — 历史趋势
+- `GET /api/asset-temperature/history?asset=GLD|BTC&days=60` — **黄金 / 比特币资产温度历史**（切到对应视图时才请求）
 
-**页面结构：**
-1. **快速链接** — CNN Fear & Greed Index + VIX 期货价格提示
-2. **顶部概览** — 综合评分、市场状态标签、建议仓位、操作建议、杠杆提示
-3. **维度拆解（3 行）** — 日线技术面[50%] / 周线技术面[35%] / 价格位置[15%]
-4. **标的卡片（2 列）** — SPY + QQQ：价格、日RSI、周RSI、MA200偏离度
-5. **历史趋势图** — ECharts 折线图，综合评分 + 建议仓位双 Y 轴
+**三种视图**（顶部 `.view-switcher` 切换，`TABS = market / gold / btc`）：
 
-### 6.4 ScoresOverview.vue — 机会速览（价值）
+| 视图 | 说明 |
+|---|---|
+| 美股大盘 | 走 `MARKET_TEMP_CODES = SPY + QQQ` 的三维度温度 |
+| 黄金 | `asset=GLD` 的资产温度 |
+| 比特币 | `asset=BTC` 的资产温度 |
 
-**API 调用：** `GET /api/scores/overview` + `GET /api/tp-sl`（按需）
+**美股大盘视图结构：**
+1. **Hero 卡** — 左：温度分（/100）+ 8 级状态 + 行动建议；右：**3 个维度块**（日线技术[50%] / 周线技术[35%] / 价格位置[15%]，各带数值与进度条）
+2. **Hero 底栏** — 建议仓位 / 数据日期 / 杠杆建议（满足条件才显示）/ `SPY K线 ↗` / `QQQ K线 ↗` / **CNN Fear & Greed Index ↗**（外链）
+3. **标的卡片（2 列）** — SPY + QQQ
+4. **历史趋势图** — ECharts 折线（`ref="chartRef"`，高 300px）
+5. **VIX 提示条**（`v-if="data"`）— 文案：**「交易时请观察VIX期货价格，30以上为极度恐慌，35以上往往是抄底的绝佳机会」**
+   （**仅提示文字，VIX 不参与温度计算**）
+   > ⚠️ 本节此前只引了前半句（截到「极度恐慌」为止），漏掉「35以上往往是抄底的绝佳机会」，已按 `MarketTemperature.vue:91` 补全（2026-10-12）。
 
-**页面结构（v2.9+）：**
-1. **可执行机会区** — 评分达标(≥60) + 站上MA5确认止跌，蓝色高亮
-2. **主升浪龙头区** — 动量评分≥70，红色高亮，显示动量分数
-3. **强烈买入(≥80)** — 带MA5状态标签 + 止盈损展开按钮
-4. **建议买入(60~79)** — 带MA5状态标签 + 止盈损展开按钮
-5. **观望(<60)** — 高动量标的显示动量徽章
+**黄金 / 比特币视图结构：**
+1. **Hero 卡** — 资产温度分 + 状态 + 行动建议；右侧同样是 3 个维度块（`ASSET_DIMS`，与 `MARKET_DIMS` 同源）
+2. **Hero 底栏** — 当前价格 / 数据日期 / `查看K线图 ↗`
+3. **资产历史趋势图**（ECharts）
+4. **技术指标卡（6 项）** — 当前价格 / 日线 RSI6 / 周线 RSI6 / MA200 偏离 / ATH 回撤 / 52 周位置 + 备注文案
 
-**止盈止损交互：** BUY/STRONG_BUY 标的右侧有「止盈损」按钮，点击展开显示止损价(含距离%)、止盈价、R:R比。按需单只请求，不批量加载。
+### 6.4 ScoresOverview.vue — 机会速览（⚠️ 未挂载路由）
 
-支持日期切换，点击跳转 Dashboard 详情。
+> ⚠️ **该页未在 `router/index.js` 注册**，源文件仍在 `src/views/`。且 `Home.vue:215` 有一个
+> `<router-link to="/scores-overview">机会速览</router-link>` 指向它 —— **这是个死链**（点击落到空白/兜底），
+> 属已知待处理问题（代码侧，非文档问题）。
+
+**API 调用：** `GET /api/scores/overview`（支持 `date` 筛选） + `GET /api/tp-sl`（点击「止盈损」时按需单只请求）
+
+**筛选标签（5 个）：** 全部 / **严重超卖且站上MA5** / 严重超卖 / 超卖 / 中性
+（对应 `all` / `actionable` / `strong_buy` / `buy` / `no_action`，各自带计数）
+> ⚠️ 本节此前把第 2 个标签写成「可执行」，实际文案是 **「严重超卖且站上MA5」**（`ScoresOverview.vue:20`），
+> 与下方第 1 个区块的标题一致；已更正（2026-10-12）。
+
+**页面结构（4 个区块，随筛选标签显隐）：**
+1. **严重超卖且站上 MA5** — `overview.actionable`，徽章「评分达标 + 站上MA5」
+   > ⚠️ 本节此前写「蓝色高亮」，**与代码不符**：该区块的 `class` 是 `card section`，与其余三块**完全同构**，
+   > `.section-title` 用 `var(--text)`、`.section-badge` 默认灰底灰字，**区块本身没有任何颜色高亮**。
+   > 蓝色只出现在两处：① 对应的**筛选标签** `.filter-tab.blue` 激活态背景（`ScoresOverview.vue:308`）
+   > ② 中性区块里 `momentum_score >= 70` 的「动量 XX」徽章（`.badge-blue`）。已更正（2026-10-12）。
+2. **严重超卖** — `overview.strong_buy`，绿色徽章 `≥ 80`
+3. **超卖** — `overview.buy`，金色徽章 `60 ~ 79`
+4. **中性** — `overview.no_action`，徽章 `< 60`；该区块内对 `momentum_score >= 70` 的行显示
+   「动量 XX」蓝色徽章（**不是独立的「主升浪龙头区」** —— 该区块只存在于 MomentumLeaders.vue）
+
+**止盈止损交互：** 各区块行右侧有「止盈损」按钮，点击展开显示止损价(含距离%)、止盈价、R:R比。按需单只请求，不批量加载。
+
+**跳转：** 点击行 → `router.push({ name: 'chart', query: { code } })`，即跳 **`/chart?code=...`**（**不是 Dashboard**）。
 
 ### 6.5 Chart.vue — K 线图查询页
 
@@ -211,7 +274,9 @@ TraderAnalysisFrontend/
 > **利弗莫尔只在 `ktype === '1d'` 时请求**：其箱体、周线潮汐、ATR 全部建立在日线尺度上，
 > 4H/1W 下画出来的水平线会与当前周期语义不符，索性不请求（省一次往返）。
 
-**EMA多空带：** 显示 ema5~ema30 共6条均线，ema5>ema30区域填充浅红(多头)，ema5<ema30区域填充浅绿(空头)。
+**EMA多空带：** 只创建 **EMA5 与 EMA30 两条 line series**，两者之间的区域由自定义 `EmaRibbonPrimitive` 填充：
+`ema5 > ema30`（多头）填**青绿** `rgba(38,166,154,0.20)`，`ema5 < ema30`（空头）填**红** `rgba(239,83,80,0.20)`。
+**不存在** ema10/15/20/25 四条线（文档此前写「6 条均线独立着色」有误，且多头/空头填充色写反了）。
 
 **支撑压力位标注（2026-10-12 新增）：**
 
@@ -247,9 +312,14 @@ TraderAnalysisFrontend/
 
 ### 6.6 Dashboard.vue — 个股技术分析
 
-**API 调用：** `GET /api/indicators/latest` + `GET /api/scores/latest` + `GET /api/watchlist`
+**API 调用：** `GET /api/scores/latest` + `GET /api/analysis` + `GET /api/fundamental` + `GET /api/watchlist`
 
-6 维度连续评分（进度条），技术指标数值面板，支持日期选择查看历史。
+> ⚠️ 本文档此前写「`GET /api/indicators/latest` + `GET /api/scores/latest` + `GET /api/watchlist`」，
+> 实测 `Dashboard.vue:285` 的 import 为 `getAnalysis, getScoresLatest, getWatchlist, getFundamental`，
+> **`getIndicatorsLatest` 从未被本页调用**（全仓无任何页面引用它），已更正。
+
+**页面构成（3 张卡）：** 标的选择器 + 日期选择 → **基本面估值卡**（分析师目标价 / 晨星公允价值 / 上行空间）→
+**道氏技术面卡**（三层趋势 + 支撑压力关键位 + 盈亏比 + 形态置信度 + 量能）→ **综合评分卡**（6 因子分解进度条）。支持日期选择查看历史。
 
 ### 6.7 Fundamental.vue — 已删除（2026-10-12）
 
@@ -271,16 +341,22 @@ TraderAnalysisFrontend/
 
 **API 调用：** `GET /api/backtest/run` + `GET /api/watchlist`
 
-**策略模式（3 种）：**
-- **趋势跟踪（推荐）** — trend 模式，跟随均线(MA5/10/20)止盈，可选站上MA5入场确认
-- **买入并持有** — hold 模式，固定持仓天数(1-250天)
-- **波段操作** — swing 模式，评分下降退出+最大持仓天数
+**策略模式（5 种）：**
+- **趋势跟踪（推荐）** — `trend` 模式，跟随均线(MA5/10/20)止盈，可选站上MA5入场确认
+- **买入并持有** — `hold` 模式，固定持仓天数(1-250天)
+- **波段操作** — `swing` 模式，评分下降退出+最大持仓天数
+- **EMA飘带多头** — `ribbon_long` 模式，空转多买入、多转空卖出
+- **EMA飘带空头** — `ribbon_short` 模式，多转空做空、空转多平空
 
 **交易明细表列：** 信号日期 / 入场价 / 退出日期 / 退出价 / 收益率 / 持仓天数 / 退出原因 / 信号
 
-**退出原因标签：** 持有到期 / 评分下降 / 达最大天数 / 跌破MA5 / 跌破MA10 / 跌破MA20
+**退出原因标签（`EXIT_REASON_LABELS`，9 个）：** 持有到期 / 评分下降 / 达最大天数 / 未完成 / 跌破MA5 / 跌破MA10 / 跌破MA20 / 飘带转空 / 飘带转多
 
 未完成交易(status=incomplete)自动过滤不展示。
+
+> ⚠️ 本文档此前写「3 种策略模式」，漏了 `ribbon_long` / `ribbon_short`；退出原因也漏了「飘带转空/飘带转多」与「未完成」，已于 2026-10-12 更正。
+> 后端 `backtest.py:37` 的 `mode` 注释同样列出 5 种（`hold | swing | trend | ribbon_long | ribbon_short`），前后端一致；
+> 但 `cli.py:362` 与 `api_server.py:475` 的 **help 文案仍只写 3 种**（参数本身可透传，非功能缺陷，属文案滞后）。
 
 ### 6.9 GridTrading.vue — 已不存在
 
@@ -297,7 +373,15 @@ TraderAnalysisFrontend/
 
 **API 调用：** `GET/POST/PATCH/DELETE /api/watchlist` + `POST /api/watchlist/refresh-snapshot`
 
-表格展示全部标的，支持分类/市场筛选和搜索。显示推荐策略(hold_10d/hold_20d/swing/trend_ma5/ma10/ma20)。新增/编辑弹窗含策略选择，删除确认，刷新快照。
+**表格列（8 列，实测 `columns`）**：代码 / 名称 / 分类 / 分析师目标 / 晨星公允 / 晨星折价 / 备注 / 操作。
+支持分类、市场筛选与搜索，晨星折价排序，删除确认，刷新快照。
+
+**弹窗字段差异（易写错）：**
+- **编辑弹窗** 含「推荐策略」选择（`recommended_strategy`，对应 `watchlist` 表的同名列）
+- **新增弹窗**（代码/分类/状态/标签等）**不含**推荐策略字段
+
+> ⚠️ 本文档此前写「表格展示…显示推荐策略(hold_10d/hold_20d/swing/trend_ma5/ma10/ma20)」——
+> 表格里**没有推荐策略列**；也写「新增/编辑弹窗含策略选择」，实际**只有编辑弹窗有**。均已于 2026-10-12 更正。
 
 > ⚠️ 此前写「条件选股(StockFilter.vue)和设置(Settings.vue)暂时隐藏，代码保留」——**这两个文件在仓库中不存在**，功能是彻底移除而非隐藏（2026-10-12 更正）。
 
@@ -351,7 +435,9 @@ TraderAnalysisFrontend/
 所有后端请求集中在这一个文件中。
 
 **Axios 实例配置：**
-- baseURL：从环境变量 `VITE_API_BASE_URL` 读取，默认 `http://localhost:8000`
+- baseURL：从环境变量 `VITE_API_BASE_URL` 读取，**默认空字符串 `''`**（此时靠 `vite.config.js` 的
+  dev proxy 把 `/api`、`/health` 转发到 `http://localhost:8000`）
+  > ⚠️ 此前文档写「默认 `http://localhost:8000`」，与 `trader.js:4` 的 `|| ''` 不符，已更正。
 - 超时：10 秒（回测接口 30 秒）
 - 无认证拦截器（认证相关代码已移除，非"暂时禁用"）
 
@@ -365,10 +451,10 @@ TraderAnalysisFrontend/
 | 标的池 | `addWatchlistStock(payload)` | `POST /api/watchlist` | WatchlistManage |
 | 标的池 | `updateWatchlistStock(code, payload)` | `PATCH /api/watchlist/{code}` | WatchlistManage |
 | 标的池 | `deleteWatchlistStock(code)` | `DELETE /api/watchlist/{code}` | WatchlistManage |
-| 标的池 | `batchAddWatchlist(payload)` | `POST /api/watchlist/batch` | WatchlistManage |
+| 标的池 | `batchAddWatchlist(payload)` | `POST /api/watchlist/batch` | ⚠️ 无页面引用 |
 | 标的池 | `refreshSnapshot(code?)` | `POST /api/watchlist/refresh-snapshot` | WatchlistManage |
 | 技术指标 | `getIndicators(code, ktype, days)` | `GET /api/indicators` | Chart |
-| 技术指标 | `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | Dashboard |
+| 技术指标 | `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | ⚠️ 无页面引用 |
 | 评分 | `getScoresLatest(code, date?)` | `GET /api/scores/latest` | Dashboard |
 | 评分 | `getScoresOverview(date?)` | `GET /api/scores/overview` | MomentumLeaders / ScoresOverview |
 | EMA 交叉 | `getEmaCrossSignals(date?)` | `GET /api/ema-cross-signals` | MomentumLeaders |
@@ -414,7 +500,11 @@ TraderAnalysisFrontend/
 | `height` | Number | `800` | 期望高度，实际高度由 `totalHeight` 取大值决定 |
 | `levels` | Object | `{supports:[], resistances:[]}` | 支撑压力位，字段见 `/api/analysis` |
 | `livermore` | Object | `{levels:[], panorama:null}` | 利弗莫尔关键点，字段见 `/api/livermore/detail`（**只用到 `levels`**，`panorama` 由 `Chart.vue` 的明细卡消费） |
-| `visible` | Object | 各指标显隐，`levels` / `livermore` 默认 `true` | `ma5/ma10/ma20/ma60/boll/ema/vol/macd/rsi/levels/livermore` |
+| `visible` | Object | 见下 | `ma5/ma10/ma20/ma60/boll/ema/vol/macd/rsi/levels/livermore` |
+
+`visible` 的**实际默认值**（`IndicatorChart.vue:19-25`）：`ma5/ma10/ma20/ma60 = false`、`boll = false`，
+其余 `ema / vol / macd / rsi / levels / livermore = true`。即**开图默认只显示 EMA 多空带 + 三个副图 + 关键位 + 利弗莫尔**，
+MA 与布林带需手动开启。
 
 **布局：** 主图最少 `MAIN_MIN = 360`，每个副图 `SUB_H = 130`，总高 `max(height, 360 + 副图数 × 130)`。副图纵向位置由 `getMargins()` 计算 `scaleMargins` 得出。
 
@@ -422,7 +512,10 @@ TraderAnalysisFrontend/
 
 **图例：** 不使用图表内置图例，而是独立 DOM（`legendRef`），由 `buildLegendHTML()` 按当前可见指标拼装，跟随十字光标更新数值。
 
-**EMA多空带渲染：** 6 条 EMA 线（ema5/10/15/20/25/30）独立着色 + ema5 vs ema30 方向判断填充区域颜色；同时输出「转多 / 转空」标记（ema5 上穿/下穿 ema30 时）。
+**EMA多空带渲染：** **只有 EMA5 与 EMA30 两条 line series**（`ema5Series` / `ema30Series`），
+中间区域由自定义 Primitive `EmaRibbonPrimitive` 填充：多头（ema5 在上）填青绿 `rgba(38,166,154,0.20)`，
+空头填红 `rgba(239,83,80,0.20)`；同时输出「转多 / 转空」标记（ema5 上穿/下穿 ema30 时）。
+> ⚠️ 此前文档写「6 条 EMA 线（ema5/10/15/20/25/30）独立着色」与「多头填浅红、空头填浅绿」，**两点都与代码不符**，已更正。
 
 **标记机制（关键约束）：** `setMarkers()` 每次调用**覆盖**前值。EMA 转多/转空标记与关键位 pivot 标记统一推入 `markerBuf`，最后按 K 线序号升序**一次性提交**；分两次调用会丢标记。
 
