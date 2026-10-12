@@ -1,6 +1,6 @@
 # TraderAnalysis Frontend — 技术方案
 
-> 更新日期：2026-05-12
+> 更新日期：2026-10-12
 
 ---
 
@@ -8,20 +8,24 @@
 
 TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获取行情数据、计算技术指标和评分；前端负责将这些数据以图表和数值面板的形式呈现给用户。
 
-当前监控 **41 只标的**（覆盖大盘/黄金/比特币/存储/光通信/MAG7/加密/半导体/太空/云/中概/防守消费等 10 个分类），后端支持按标的代码查询。
+当前监控 **195 只标的**，覆盖 **26 个分类**（实测自 `/api/watchlist`）：
+
+- 市场分布：美股 192 + 港股 3（HK.00700 / HK.01211 / HK.03690）
+- 主要分类：financials(27) / consumer(19) / healthcare(18) / tech(14) / industrials(13) / sector_etf(11) / software(9) / mag7(8) / ai_infra(7) / cyclical(7) / commodity(6) / energy(6) / semiconductor(6) / crypto(5) / defensive_consumer(5) / utilities(5) / defensive(4) / market_gold_btc(4) / china_adr(3) / cloud(3) / emerging_market(3) / optical(3) / storage(3) / hk_stock(2) / space(2) / 空值(2)
 
 ### 1.1 核心用户场景
 
 | 场景 | 描述 |
 |------|------|
 | 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议 |
-| 交易机会速览 | 一眼看清所有标的评分分布，可执行机会（止跌确认）+ 主升浪龙头 |
-| 个股技术分析 | 查看某标的最新技术指标数值和评分（6 维度连续映射） |
-| 基本面分析 | 全标的基本面评分速览（5 因子），单只详情弹窗 |
-| 信号回测 | 3 种策略模式历史回测验证（买入并持有/技术指标买卖/跟随止盈） |
-| 查看 K 线图 | 选择标的和周期，查看蜡烛图及叠加的技术指标 |
-| 网格交易 | 网格策略运行状态监控、参数查看、交易记录 |
-| 标的池管理 | 增删改查标的，筛选/搜索，推荐策略，刷新快照 |
+| 交易信号 | 空转多/多转空（EMA5/30 交叉）+ 主升浪龙头 + 主跌浪超卖 + 低估做多机会 |
+| 个股技术分析 | 道氏三层趋势 + 支撑压力关键位 + 形态置信度 + 盈亏比 + 6 因子评分 |
+| 查看 K 线图 | 选择标的和周期（4H/日K/周K），蜡烛图 + 多窗格指标 + **支撑压力位标注** |
+| 信号回测 | 3 种策略模式历史回测验证（趋势跟踪/买入持有/波段操作） |
+| 市场复盘 | 日/周复盘报告 + 自媒体文案生成（小红书/知乎/公众号） |
+| 我的持仓 | 实时持仓查询（依赖本机 OpenD） |
+| 目标仓位 | 永久投资组合目标 vs 实际对比 + 四级加仓建议（依赖本机 OpenD） |
+| 标的池管理 | 增删改查标的，筛选/搜索，晨星折价排序，刷新快照 |
 
 ---
 
@@ -34,16 +38,26 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 | **Vue 3** | ^3.5 | 前端框架 | Composition API 灵活，生态成熟，中文资料丰富 |
 | **Vite** | ^5.4 | 构建工具 | 毫秒级热更新，内置代理，Vue 官方推荐 |
 | **Ant Design Vue** | ^4.2 | UI 组件库 | 提供布局、卡片、表单、标签、描述列表、日期选择器等 60+ 组件 |
-| **ECharts** | ^6.0 | 图表渲染 | 原生支持 K 线蜡烛图 + 多窗格联动，适合金融场景 |
+| **LightweightCharts** | ^4.2 | K 线图表（`IndicatorChart.vue`） | TradingView 出品，金融图表开箱即用，体积小 |
+| **ECharts** | ^6.0 | 温度趋势图（`MarketTemperature.vue`） | 通用折线/多轴图表 |
 | **Axios** | ^1.7 | HTTP 客户端 | 拦截器、超时控制、错误统一处理 |
 | **Vue Router** | ^4.4 | 路由 | SPA 页面导航，支持懒加载 + 路由守卫 |
 | **Day.js** | — | 日期处理 | Ant Design Vue DatePicker 依赖 |
 
-### 2.2 为什么用 ECharts 而不是 LightweightCharts
+### 2.2 图表库的实际使用情况
 
-项目最初使用了 TradingView 的 LightweightCharts。后来后端 API 新增了 MACD、RSI、成交量等需要**独立子图窗格**展示的指标，LightweightCharts 不原生支持多窗格联动，实现复杂且效果差。ECharts 通过 `grid` + `dataZoom` 可以在一个图表实例内实现多个窗格共享时间轴、联动缩放，是更合适的选择。
+**K 线图表用的是 LightweightCharts，不是 ECharts。** 两者都在用，但分工不同：
 
-> LightweightCharts 的依赖仍保留在 package.json 中，对应的旧组件 `KLineChart.vue` 也保留未删除，当前未被使用。
+| 库 | 版本 | 用在哪 | 说明 |
+|---|---|---|---|
+| **lightweight-charts** | ^4.2 | `IndicatorChart.vue`（K 线主图） | 单 `createChart` 实例 + `priceScaleId` 分派 |
+| **echarts** | ^6.0 | `MarketTemperature.vue`（温度趋势图） | 普通折线图，无需多窗格 |
+
+多窗格的实现方式：**不是**创建多个图表实例，而是在同一个 chart 上给副图 series 指定独立的 `priceScaleId`（`vol` / `macd` / `rsi`），再用 `chart.priceScale(id).applyOptions({ scaleMargins })` 把各自的纵向区间压缩到对应高度比例，从而叠出「主图 + 成交量 + MACD + RSI」的分层效果。由于共享同一个时间轴，**缩放/平移天然联动**，不需要 ECharts 那样用 `dataZoom` 手工同步。
+
+> ⚠️ 本节此前写作「已改用 ECharts 而非 LightweightCharts」，与代码不符，已于 2026-10-12 更正。
+> 依赖 `lightweight-charts` 由 `IndicatorChart.vue` 实际使用，**不可从 `package.json` 移除**。
+> （此前还称「旧组件 `KLineChart.vue` 保留未删除」——该文件**在仓库中并不存在**，一并更正。）
 
 ---
 
@@ -62,35 +76,43 @@ TraderAnalysisFrontend/
 ├── docs/                         # 文档目录
 │   └── architecture.md           # 本文件
 │
-└── src/                          # 源代码
+└── src/                          # 源代码（共 18 个文件）
     ├── main.js                   # 应用入口
     ├── App.vue                   # 根组件（顶部导航 + 下拉菜单 + 健康检查）
     ├── router/index.js           # 路由配置
     ├── api/trader.js             # API 调用层
+    ├── styles/
+    │   ├── theme.js              # ant-design-vue 主题 token
+    │   └── tokens.css            # CSS 变量（配色 / 间距 / 字体）
     ├── components/               # 可复用组件
-    │   ├── IndicatorChart.vue    # ECharts 图表组件
-    │   └── KLineChart.vue        # 旧图表组件（未使用）
-    └── views/                    # 页面
-        ├── Home.vue              # 首页（价值投资理念）
-        ├── MarketTemperature.vue # 市场温度仪表盘
-        ├── ScoresOverview.vue    # 机会速览（价值）+ 可执行机会 + 主升浪
-        ├── Dashboard.vue         # 个股技术分析
-        ├── Fundamental.vue       # 个股基本面分析（暂时隐藏）
-        ├── Backtest.vue          # 信号回测（3 策略模式）
-        ├── Chart.vue             # 个股历史K线
-        ├── GridTrading.vue       # 网格交易监控（暂时隐藏）
-        ├── WatchlistManage.vue   # 标的池管理
-        ├── Login.vue             # 登录页（暂时禁用）
-        ├── StockFilter.vue       # 条件选股（暂时隐藏）
-        └── Settings.vue          # 设置（暂时隐藏）
+    │   └── IndicatorChart.vue    # lightweight-charts K 线图表组件（唯一组件）
+    └── views/                    # 页面（★ = 已在 router 注册）
+        ├── Home.vue              # ★ 首页（价值投资理念）
+        ├── MarketTemperature.vue # ★ 市场温度仪表盘
+        ├── Chart.vue             # ★ 个股历史K线（含支撑压力位标注）
+        ├── MomentumLeaders.vue   # ★ 交易信号（空转多/多转空/主升浪/主跌浪/低估做多）
+        ├── Dashboard.vue         # ★ 个股技术分析
+        ├── Backtest.vue          # ★ 信号回测（3 策略模式）
+        ├── WatchlistManage.vue   # ★ 标的池管理
+        ├── Review.vue            # ★ 市场复盘 + 自媒体文案
+        ├── Position.vue          # ★ 我的持仓（依赖 OpenD）
+        ├── Allocation.vue        # ★ 目标仓位（依赖 OpenD）
+        └── ScoresOverview.vue    # 机会速览（未挂载）
 ```
+
+> ⚠️ **勘误（2026-10-12）**：本树此前列出 `GridTrading.vue` / `Login.vue` / `StockFilter.vue` / `Settings.vue` / `components/KLineChart.vue`，
+> 这些文件**在仓库中均不存在**（`find src -type f` 可验），已从文档删除。实测 `src/` 下只有 18 个文件、`components/` 下只有 `IndicatorChart.vue` 一个组件。
 
 ---
 
 ## 4. 认证系统
 
 > **v2.8+ 状态：认证暂时禁用。** 所有页面公开访问，无路由守卫，无 token 管理。
-> Login.vue 和相关拦截器代码保留在代码库中，待后端恢复认证后可重新启用。
+> `src/api/trader.js` 的 axios 实例**没有任何认证拦截器**，`localStorage` 中也不存 token。
+>
+> ⚠️ **勘误（2026-10-12）**：本节此前写「Login.vue 和相关拦截器代码保留在代码库中，待后端恢复认证后可重新启用」——
+> 实测 `src/views/Login.vue` **并不存在**，拦截器代码也已不在 `trader.js` 中，认证相关代码是**彻底移除**而非「暂时禁用」。
+> 若日后要恢复登录，需从头新建登录页 + 拦截器 + 后端校验，**不能指望现成的残留代码**。
 
 ---
 
@@ -102,15 +124,21 @@ TraderAnalysisFrontend/
 |------|------|------|
 | `/` | Home.vue | 首页，价值投资理念 |
 | `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘 |
-| `/scores-overview` | ScoresOverview.vue | 机会速览（价值）+ 可执行机会 + 主升浪 |
+| `/chart` | Chart.vue | 个股历史K线（含支撑压力位标注） |
+| `/momentum-leaders` | MomentumLeaders.vue | 交易信号（空转多/多转空、主升浪龙头、主跌浪超卖、低估做多） |
 | `/dashboard` | Dashboard.vue | 个股技术分析 |
-| `/fundamental` | Fundamental.vue | 个股基本面分析 |
 | `/backtest` | Backtest.vue | 信号回测（3 种策略模式） |
-| `/chart` | Chart.vue | 个股历史K线 |
-| `/grid-trading` | GridTrading.vue | 网格交易监控 |
 | `/watchlist-manage` | WatchlistManage.vue | 标的池管理 |
+| `/review` | Review.vue | 市场复盘 + 自媒体文案生成 |
+| `/position` | Position.vue | 我的持仓（依赖 OpenD） |
+| `/allocation` | Allocation.vue | 目标仓位（依赖 OpenD） |
 
 所有路由使用懒加载（`() => import(...)`）。
+
+> ⚠️ 本文档此前列出 `/scores-overview`、`/fundamental`、`/grid-trading` **三条已不在 `router/index.js` 中的路由**，且漏记 `/momentum-leaders`、`/review`、`/position`、`/allocation`，已于 2026-10-12 更正。
+> 未注册路由但源文件仍在 `src/views/` 的**只有 `ScoresOverview.vue`**。
+> （`Fundamental.vue` / `GridTrading.vue` / `Login.vue` / `StockFilter.vue` / `Settings.vue` 的文件在仓库中已不存在，见各节勘误。）
+> `Fundamental.vue` 已于 2026-10-12 删除，原因见 §6.7。
 
 ### 5.2 布局
 
@@ -119,7 +147,7 @@ TraderAnalysisFrontend/
 - 浅色主题（白色背景 + 蓝色高亮）
 - 内容区域最大宽度 1400px 居中
 - 后端状态指示灯（绿/红点）
-- "个股分析"为下拉菜单（包含技术分析/基本面/历史K线）
+- "个股分析"为下拉菜单（**仅 2 项**：个股技术分析 `/dashboard`、个股历史K线 `/chart`。早期文档写的"基本面"入口代码中不存在）
 
 ---
 
@@ -127,13 +155,18 @@ TraderAnalysisFrontend/
 
 ### 6.1 Home.vue — 首页
 
-品牌展示页，价值投资理念 + "查看市场温度"按钮 + 登录按钮（未登录时显示）。无后端 API 调用。
+品牌展示页（「持有最好的公司」），价值投资理念 + "查看市场温度"按钮 + 向下滚动区块（核心能力三支柱/市场温度）。无后端 API 调用。
 
-### 6.2 Login.vue — 登录页
+### 6.2 Login.vue — 已不存在（2026-10-12 勘误）
 
-**API 调用：** `POST /api/auth/login`
+**该页面与认证体系已从代码库彻底移除**，不是"暂时禁用"：
 
-居中卡片表单（用户名 + 密码），登录成功后存储 token/role 并跳转首页。后端登录失败返回 200 + `{data: null, message}`，前端判断 `access_token` 是否存在。
+- `src/views/Login.vue` 文件不存在，`router/index.js` 中无任何登录路由，`App.vue` 与 `Home.vue` 中也没有登录入口
+- `src/api/trader.js` 无认证拦截器，无 token 存取
+- 文档此处此前引用的 `POST /api/auth/login` 端点在 `api_server.py` 中也**不存在**
+  （后端仅保留 `users` 表 2 行数据，无鉴权中间件；所有 API 公开可访问）
+
+> 若日后要恢复登录：需新建登录页 + axios 拦截器 + 后端鉴权端点，**不能依赖任何现成残留代码**。
 
 ### 6.3 MarketTemperature.vue — 市场温度仪表盘
 
@@ -165,11 +198,31 @@ TraderAnalysisFrontend/
 
 ### 6.5 Chart.vue — K 线图查询页
 
-**API 调用：** `GET /api/indicators` + `GET /api/watchlist`
+**API 调用：** `GET /api/indicators`（K 线+指标） + `GET /api/analysis`（关键位） + `GET /api/watchlist`
 
 标的选择器 + 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动，指标可切换显隐。
 
+> `/api/indicators` 与 `/api/analysis` **并行拉取**（`Promise.all`），关键位请求失败只清空关键位数据、不影响 K 线渲染。
+
 **EMA多空带：** 显示 ema5~ema30 共6条均线，ema5>ema30区域填充浅红(多头)，ema5<ema30区域填充浅绿(空头)。
+
+**支撑压力位标注（2026-10-12 新增）：**
+
+> ⚠️ **命名说明**：该功能用后端 `technical_analysis.find_support_resistance()` 的
+> **Swing Pivot 聚类**结果标注，**不是利弗莫尔（Livermore）的关键点模型**。
+> 二者名称相近但语义不同（前者是双向对称的静态价位，后者是带量能确认的趋势突破触发价）。
+> 因此 UI 与文档统一称「支撑压力位」，不冠以「利弗莫尔」之名。详见 `../../TraderAnalysis/docs/api.md` 的 `/api/analysis` 说明。
+
+| 元素 | 说明 |
+|---|---|
+| 水平线 | 支撑绿色 `#26a69a` / 压力红色 `#ef5350`；每侧最多 3 道（`MAX_LEVEL_LINES`） |
+| 选取优先级 | 最近一道（`is_nearest`）> 强度（`strength`）降序 |
+| 线型 | 最近一道 / MA60 关键位 → 实线 + 加粗 + 显示价格轴标签；其余 → 虚线且不占轴标签 |
+| pivot 标记 | 用 `bars_ago` 反推 K 线序号（`idx = data.length - 1 - bars_ago`），支撑在下 `arrowUp`、压力在上 `arrowDown`，强度 ≥2 才带文字 |
+| 开关 | `visible.levels`，默认开；关闭后图表与明细卡片同时隐藏 |
+| 明细卡片 | 图表下方支撑/压力双栏：价格、label、距现价 pct、强度、MA60/最近徽章、道氏上下文 + 盈亏比区域 |
+
+> ⚠️ **`setMarkers()` 每次调用会覆盖前值**。EMA 转多/转空标记与关键位 pivot 标记必须统一写入缓冲区，按 K 线序号升序**一次性提交**，分成两次调用会丢标记。
 
 ### 6.6 Dashboard.vue — 个股技术分析
 
@@ -177,18 +230,21 @@ TraderAnalysisFrontend/
 
 6 维度连续评分（进度条），技术指标数值面板，支持日期选择查看历史。
 
-### 6.7 Fundamental.vue — 基本面分析（暂时隐藏，路由已注释）
+### 6.7 Fundamental.vue — 已删除（2026-10-12）
 
-**API 调用：**
-- `GET /api/fundamental/overview` — 全标的基本面速览
-- `GET /api/fundamental/latest?code=XXX` — 单只详情
+该页面原计划做「全标的基本面速览 + 单只详情」，但从未挂载路由，且依赖的
+`GET /api/fundamental/overview`、`GET /api/fundamental/latest` **后端端点并不存在**：
 
-**页面结构：**
-1. **统计卡片** — 低估/合理/高估/跳过 数量
-2. **三组分区表格** — UNDERVALUED / FAIR / OVERVALUED
-3. **详情弹窗** — 5因子评分分解 + 估值/分析师/成长性/财务健康明细
+- `src/api/trader.js` 只有 `getFundamental(code, date)` → `GET /api/fundamental`（单只）
+- `watchlist` 表中 `forward_pe` / `peg_ratio` / `roe` / `market_cap` **填充率 0/195**
+- `fundamental_data` 表仅 1 行历史测试数据（US.NVDA 2026-05-07），5 因子中的 4 个无数据来源
 
-**5 因子（满分 100）：** 估值折价(30) / PE合理性(20) / 成长性(20) / 财务健康(15) / 分析师共识(15)
+即该页面在数据层就无法工作，其 `import { getFundamentalOverview, getFundamentalLatest }` 是悬空引用。
+2026-10-12 已删除该文件（Git 历史可恢复：`git show <commit>:src/views/Fundamental.vue`）。
+
+> 现存的基本面信息（晨星公允价值 / 分析师目标价）已在 **Dashboard.vue** 中展示，走 `getFundamental()`。
+> 若要恢复「全池估值速览」页，应新建独立后端端点，数据源只能用 `morningstar_fair_value`(165/195)
+> 与 `analyst_target_mean`(161/195) 两项，不要沿用已废弃的 5 因子假设。
 
 ### 6.8 Backtest.vue — 信号回测
 
@@ -205,16 +261,16 @@ TraderAnalysisFrontend/
 
 未完成交易(status=incomplete)自动过滤不展示。
 
-### 6.9 GridTrading.vue — 网格交易（暂时隐藏，路由已注释）
+### 6.9 GridTrading.vue — 已不存在
 
-**API 调用：** `GET /api/grid/status` + `GET /api/grid/orders`
+**该页面的前端文件与 API 封装均已移除**：
 
-**页面结构：**
-1. 状态概览（标的、运行状态、环境、最新价）
-2. 网格参数（价格上下限、网格数量、间距、每格数量、最大持仓）
-3. 实时状态（当前持仓、成本、当日盈亏、交易次数）
-4. 网格线可视化
-5. 交易记录表
+- `src/views/GridTrading.vue` 不存在，`router/index.js` 中无 `/grid-trading` 路由
+- `src/api/trader.js` 中无 `getGridStatus` / `getGridOrders`
+- 后端 `/api/grid/status`、`/api/grid/orders` 端点**仍存在**，DB 中 `grid_config`(2) / `grid_state`(2) 表仍有数据
+
+> 即：**网格交易的后端与数据还在，前端展示层已拆掉**。若要在前端恢复，可用现成的两个后端端点重建页面；
+> 但 `docs/grid-trading-engine-design.md` 是设计文档，不代表已实现的前端功能。
 
 ### 6.10 WatchlistManage.vue — 标的池管理
 
@@ -222,7 +278,7 @@ TraderAnalysisFrontend/
 
 表格展示全部标的，支持分类/市场筛选和搜索。显示推荐策略(hold_10d/hold_20d/swing/trend_ma5/ma10/ma20)。新增/编辑弹窗含策略选择，删除确认，刷新快照。
 
-> 条件选股(StockFilter.vue)和设置(Settings.vue)暂时隐藏，代码保留。
+> ⚠️ 此前写「条件选股(StockFilter.vue)和设置(Settings.vue)暂时隐藏，代码保留」——**这两个文件在仓库中不存在**，功能是彻底移除而非隐藏（2026-10-12 更正）。
 
 ---
 
@@ -235,34 +291,48 @@ TraderAnalysisFrontend/
 **Axios 实例配置：**
 - baseURL：从环境变量 `VITE_API_BASE_URL` 读取，默认 `http://localhost:8000`
 - 超时：10 秒（回测接口 30 秒）
-- 无认证拦截器（认证暂时禁用）
+- 无认证拦截器（认证相关代码已移除，非"暂时禁用"）
 
-**导出函数：**
+**导出函数**（与 `src/api/trader.js` 逐一对应）：
 
-| 函数 | 请求 | 页面 |
-|------|------|------|
-| `getHealth()` | `GET /health` | App.vue |
-| `getWatchlist(params?)` | `GET /api/watchlist` | 多处 |
-| `getWatchlistDetail(code)` | `GET /api/watchlist/{code}` | — |
-| `addWatchlistStock(payload)` | `POST /api/watchlist` | WatchlistManage |
-| `updateWatchlistStock(code, payload)` | `PATCH /api/watchlist/{code}` | WatchlistManage |
-| `deleteWatchlistStock(code)` | `DELETE /api/watchlist/{code}` | WatchlistManage |
-| `batchAddWatchlist(payload)` | `POST /api/watchlist/batch` | WatchlistManage |
-| `refreshSnapshot(code?)` | `POST /api/watchlist/refresh-snapshot` | WatchlistManage |
-| `stockFilterSearch(params)` | `GET /api/stock-filter/search` | StockFilter |
-| `stockFilterInfo(code)` | `GET /api/stock-filter/info` | StockFilter |
-| `getFundamentalLatest(code)` | `GET /api/fundamental/latest` | Fundamental |
-| `getFundamentalOverview()` | `GET /api/fundamental/overview` | Fundamental |
-| `getIndicators(code, ktype, days)` | `GET /api/indicators` | Chart |
-| `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | Dashboard |
-| `getScoresLatest(code, date?)` | `GET /api/scores/latest` | Dashboard |
-| `getScoresOverview(date?)` | `GET /api/scores/overview` | ScoresOverview |
-| `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature |
-| `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature |
-| `getTpSl(code, params?)` | `GET /api/tp-sl` | ScoresOverview |
-| `getBacktestRun(params)` | `GET /api/backtest/run` | Backtest |
-| `getGridStatus(configId)` | `GET /api/grid/status` | GridTrading |
-| `getGridOrders(configId, limit)` | `GET /api/grid/orders` | GridTrading |
+| 分组 | 函数 | 请求 | 页面 |
+|------|------|------|------|
+| 健康检查 | `getHealth()` | `GET /health` | App.vue |
+| 标的池 | `getWatchlist(params?)` | `GET /api/watchlist` | 多处 |
+| 标的池 | `getWatchlistDetail(code)` | `GET /api/watchlist/{code}` | — |
+| 标的池 | `addWatchlistStock(payload)` | `POST /api/watchlist` | WatchlistManage |
+| 标的池 | `updateWatchlistStock(code, payload)` | `PATCH /api/watchlist/{code}` | WatchlistManage |
+| 标的池 | `deleteWatchlistStock(code)` | `DELETE /api/watchlist/{code}` | WatchlistManage |
+| 标的池 | `batchAddWatchlist(payload)` | `POST /api/watchlist/batch` | WatchlistManage |
+| 标的池 | `refreshSnapshot(code?)` | `POST /api/watchlist/refresh-snapshot` | WatchlistManage |
+| 技术指标 | `getIndicators(code, ktype, days)` | `GET /api/indicators` | Chart |
+| 技术指标 | `getIndicatorsLatest(code, ktype)` | `GET /api/indicators/latest` | Dashboard |
+| 评分 | `getScoresLatest(code, date?)` | `GET /api/scores/latest` | Dashboard |
+| 评分 | `getScoresOverview(date?)` | `GET /api/scores/overview` | MomentumLeaders / ScoresOverview |
+| EMA 交叉 | `getEmaCrossSignals(date?)` | `GET /api/ema-cross-signals` | MomentumLeaders |
+| 市场温度 | `getMarketTemperature()` | `GET /api/market-temperature` | MarketTemperature |
+| 市场温度 | `getMarketTemperatureHistory(days)` | `GET /api/market-temperature/history` | MarketTemperature |
+| 市场温度 | `getAssetTemperatureHistory(asset, days)` | `GET /api/asset-temperature/history` | MarketTemperature |
+| 止盈止损 | `getTpSl(code, params?)` | `GET /api/tp-sl` | ScoresOverview |
+| 信号回测 | `getBacktestRun(params)` | `GET /api/backtest/run` | Backtest |
+| **技术分析** | **`getAnalysis(code, date?, ktype?)`** | **`GET /api/analysis`** | **Dashboard / Chart** |
+| 交易信号 | `getTradeSignals(code, date?)` | `GET /api/trade-signals` | ⚠️ 无页面引用 |
+| 交易信号 | `getBottomSignals(code, days)` | `GET /api/bottom-signals` | ⚠️ 无页面引用 |
+| 基本面 | `getFundamental(code, date?)` | `GET /api/fundamental` | Dashboard |
+| 每日优选 | `getDailyPicks(date?)` | `GET /api/daily-picks` | MomentumLeaders |
+| 内容生成 | `getContentGenerator(code, platform?, date?)` | `GET /api/content-generator` | Review |
+| 内容生成 | `getReview(type, date?)` | `GET /api/review` | Review |
+| 内容生成 | `listContentTemplates()` | `GET /api/content-templates` | Review |
+| 内容生成 | `saveContentTemplate(key, payload)` | `PUT /api/content-templates/{key}` | Review |
+| 内容生成 | `deleteContentTemplate(key)` | `DELETE /api/content-templates/{key}` | Review |
+| 持仓（OpenD） | `getPosition(env, currency?)` | `GET /api/position` | Position |
+| 目标仓位（OpenD） | `getAllocation(env)` | `GET /api/allocation` | Allocation |
+| 目标仓位（OpenD） | `saveAllocationConfig(payload)` | `PUT /api/allocation` | Allocation |
+
+> ⚠️ **勘误（2026-10-12）**：本文档此前列出 `getFundamentalLatest` / `getFundamentalOverview` / `stockFilterSearch` / `stockFilterInfo` / `getGridStatus` / `getGridOrders`，**`src/api/trader.js` 中均不存在**，已删除。
+> 连带处理：唯一引用前两者的 `views/Fundamental.vue` 是悬空引用（其依赖的后端端点也不存在）→ **该文件已于 2026-10-12 删除**，详见 §6.7。
+>
+> 超时设置：`getBacktestRun` / `getDailyPicks` / `getContentGenerator` / `getReview` / `getPosition` / `getAllocation` / `saveAllocationConfig` 为 30s，其余走默认 10s。
 
 ---
 
@@ -270,13 +340,28 @@ TraderAnalysisFrontend/
 
 ### `src/components/IndicatorChart.vue`
 
-基于 ECharts 的多窗格联动图表组件。
+基于 **lightweight-charts v4** 的多窗格联动 K 线组件（单 `createChart` 实例 + `priceScaleId` 分派，见 §2.2）。
 
-**Props：** `data`(Array) / `height`(Number, 默认800) / `visible`(Object, 各指标显隐)
+**Props：**
 
-**图表结构：** 主图(K线+MA+布林+EMA多空带) → 成交量 → MACD → RSI → DataZoom（四窗格联动）
+| Prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `data` | Array | `[]` | `/api/indicators` 返回的 `data` 数组 |
+| `height` | Number | `800` | 期望高度，实际高度由 `totalHeight` 取大值决定 |
+| `levels` | Object | `{supports:[], resistances:[]}` | 支撑压力位，字段见 `/api/analysis` |
+| `visible` | Object | 各指标显隐，`levels` 默认 `true` | `ma5/ma10/ma20/ma60/boll/ema/vol/macd/rsi/levels` |
 
-**EMA多空带渲染：** 6条EMA线(ema5/10/15/20/25/30)独立着色 + ema5 vs ema30 方向判断填充区域颜色。
+**布局：** 主图最少 `MAIN_MIN = 360`，每个副图 `SUB_H = 130`，总高 `max(height, 360 + 副图数 × 130)`。副图纵向位置由 `getMargins()` 计算 `scaleMargins` 得出。
+
+**图表结构：** 主图（K线 + MA + 布林 + EMA 多空带）→ 成交量（含 vol_ma20）→ MACD（柱 + DIF/DEA）→ RSI6（含 70/30 虚线参考线）；共享时间轴，缩放/平移天然联动。
+
+**图例：** 不使用图表内置图例，而是独立 DOM（`legendRef`），由 `buildLegendHTML()` 按当前可见指标拼装，跟随十字光标更新数值。
+
+**EMA多空带渲染：** 6 条 EMA 线（ema5/10/15/20/25/30）独立着色 + ema5 vs ema30 方向判断填充区域颜色；同时输出「转多 / 转空」标记（ema5 上穿/下穿 ema30 时）。
+
+**标记机制（关键约束）：** `setMarkers()` 每次调用**覆盖**前值。EMA 转多/转空标记与关键位 pivot 标记统一推入 `markerBuf`，最后按 K 线序号升序**一次性提交**；分两次调用会丢标记。
+
+**支撑压力位：** 见 §6.5「支撑压力位标注」。要点：`pickLevels()` 按「最近一道 > 强度」取前 `MAX_LEVEL_LINES = 3` 道；强位（`is_nearest` 或 `is_key`）用实线加粗 + 显示轴标签，弱位用虚线不显标签；pivot 标记用 `bars_ago` 反推序号定位。
 
 ---
 

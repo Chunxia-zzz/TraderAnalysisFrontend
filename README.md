@@ -40,10 +40,11 @@ npm run preview  # 本地预览生产构建
 | 交易信号 | `/momentum-leaders` | 空转多/多转空（EMA5/30交叉）+ 主升浪龙头 + 主跌浪超卖 + 低估做多 |
 | 个股分析 | `/dashboard` | 道氏三层趋势 + 基本面估值（分析师+晨星）+ 关键位置盈亏比 + 形态置信度 + 综合评分 |
 | 信号回测 | `/backtest` | 3 种策略模式回测（趋势跟踪/买入并持有/波段操作），统计+交易明细 |
-| 个股历史K线 | `/chart` | 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动，支持 4H/日K/周K |
+| 个股历史K线 | `/chart` | 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动 + **支撑压力位标注**（水平线 + pivot 标记 + 明细卡片），支持 4H/日K/周K |
 | 标的管理 | `/watchlist-manage` | 标的池增删改查 + 筛选 + 晨星折价排序 + 刷新快照 |
-| ~~个股基本面分析~~ | `/fundamental` | *暂时隐藏* |
-| ~~网格交易~~ | `/grid-trading` | *暂时隐藏* |
+| 市场复盘 | `/review` | 日/周复盘报告 + 自媒体文案生成 |
+| 我的持仓 | `/position` | 实时持仓查询（依赖本机 OpenD） |
+| 目标仓位 | `/allocation` | 永久组合目标 vs 实际对比 + 四级加仓建议（依赖本机 OpenD） |
 
 ## 导航结构
 
@@ -55,7 +56,7 @@ npm run preview  # 本地预览生产构建
 
 ## 认证
 
-> **v2.8+**: 认证模块暂时禁用。所有页面公开访问，无需登录。
+> **v2.8+**: 认证相关代码（登录页、axios 拦截器、后端鉴权端点）**已从代码库移除**，非"暂时禁用"。所有页面与 API 公开访问，无需登录。若需恢复，须从头重建。
 
 ## 技术栈
 
@@ -64,7 +65,8 @@ npm run preview  # 本地预览生产构建
 | 框架 | Vue 3 | Composition API + `<script setup>` |
 | 构建 | Vite 5 | 开发服务器 + 生产构建 |
 | UI 组件 | Ant Design Vue 4 | 布局、卡片、表单、标签、表格等 |
-| 图表 | ECharts 6 | K 线 + 多窗格技术指标 + 市场温度趋势 |
+| 图表 | lightweight-charts 4 | K 线主图 + 成交量/MACD/RSI 多窗格联动 |
+| 图表 | ECharts 6 | 市场温度趋势图 |
 | HTTP | Axios | API 请求 |
 | 路由 | Vue Router 4 | 页面导航 |
 
@@ -74,13 +76,14 @@ npm run preview  # 本地预览生产构建
 |------|------|------|
 | `GET /api/market-temperature` | 市场温度 | MarketTemperature |
 | `GET /api/market-temperature/history` | 温度历史 | MarketTemperature |
-| `GET /api/analysis` | 道氏趋势 + 支撑压力 + 形态置信度 + 盈亏比 | Dashboard |
+| `GET /api/analysis` | 道氏趋势 + 支撑/压力关键位（Swing Pivot 聚类）+ 形态置信度 + 盈亏比（1d/4h/1w） | Dashboard / Chart |
 | `GET /api/fundamental` | 基本面估值（分析师+晨星） | Dashboard |
 | `GET /api/scores/latest` | 6 因子评分 | Dashboard |
 | `GET /api/scores/overview` | 评分速览+动量龙头 | MomentumLeaders |
 | `GET /api/ema-cross-signals` | EMA 交叉信号（空转多/多转空） | MomentumLeaders |
 | `GET /api/daily-picks` | 高置信度低估做多机会 | MomentumLeaders |
 | `GET /api/indicators` | K 线+指标（1d/4h/1w） | Chart |
+| `GET /api/analysis` | 支撑/压力关键位（供 K 线图标注） | Chart |
 | `GET /api/backtest/run` | 信号回测 | Backtest |
 | `GET /api/watchlist` | 标的池（含晨星折价） | WatchlistManage |
 | `POST/PATCH/DELETE /api/watchlist` | 标的管理 | WatchlistManage |
@@ -89,28 +92,32 @@ npm run preview  # 本地预览生产构建
 ## 目录结构
 
 ```
-src/
+src/                          # 共 18 个文件
 ├── api/trader.js              # 所有后端 API 调用函数
+├── styles/
+│   ├── theme.js               # ant-design-vue 主题 token
+│   └── tokens.css             # CSS 变量
 ├── components/
-│   ├── IndicatorChart.vue     # ECharts 多窗格图表组件
-│   └── KLineChart.vue         # 旧图表组件（未使用）
-├── views/
-│   ├── Home.vue               # 首页
-│   ├── MarketTemperature.vue  # 市场温度仪表盘
-│   ├── MomentumLeaders.vue    # 交易信号（空转多/多转空/主升浪龙头/主跌浪超卖）
-│   ├── ScoresOverview.vue     # 机会速览（已下架）
-│   ├── Chart.vue              # K 线图查询页
-│   ├── Dashboard.vue          # 道氏趋势个股分析
-│   ├── Fundamental.vue        # 基本面分析（暂时隐藏）
-│   ├── Backtest.vue           # 信号回测
-│   ├── GridTrading.vue        # 网格交易（暂时隐藏）
-│   ├── WatchlistManage.vue    # 标的池管理
-│   ├── Login.vue              # 登录页（暂时禁用）
-│   ├── StockFilter.vue        # 条件选股（暂时隐藏）
-│   └── Settings.vue           # 设置（暂时隐藏）
+│   └── IndicatorChart.vue     # lightweight-charts 多窗格图表组件（唯一组件）
+├── views/                     # ★ = 已在 router 注册
+│   ├── Home.vue               # ★ 首页
+│   ├── MarketTemperature.vue  # ★ 市场温度仪表盘
+│   ├── MomentumLeaders.vue    # ★ 交易信号（空转多/多转空/主升浪龙头/主跌浪超卖）
+│   ├── Chart.vue              # ★ K 线图查询页（含支撑压力位标注）
+│   ├── Dashboard.vue          # ★ 道氏趋势个股分析
+│   ├── Backtest.vue           # ★ 信号回测
+│   ├── WatchlistManage.vue    # ★ 标的池管理
+│   ├── Review.vue             # ★ 市场复盘 + 文案生成
+│   ├── Position.vue           # ★ 我的持仓（依赖 OpenD）
+│   ├── Allocation.vue         # ★ 目标仓位（依赖 OpenD）
+│   └── ScoresOverview.vue     # 机会速览（未挂载）
 ├── router/index.js            # 路由配置
 ├── App.vue                    # 根组件（导航 + 健康检查）
 └── main.js                    # 入口文件
 ```
+
+> ⚠️ 2026-10-12 勘误：此前列出的 `components/KLineChart.vue` 与 `views/` 下的
+> `Fundamental.vue` / `GridTrading.vue` / `Login.vue` / `StockFilter.vue` / `Settings.vue`
+> **在仓库中均不存在**，已从文档删除。
 
 详细技术方案见 [docs/architecture.md](docs/architecture.md)。

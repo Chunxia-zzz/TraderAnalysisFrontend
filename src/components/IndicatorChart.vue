@@ -12,11 +12,13 @@ import { createChart, ColorType, LineStyle, CrosshairMode } from 'lightweight-ch
 const props = defineProps({
   data:    { type: Array,  default: () => [] },
   height:  { type: Number, default: 800 },
+  // 支撑/压力关键位：{ supports: [...], resistances: [...] }，字段见 /api/analysis
+  levels:  { type: Object, default: () => ({ supports: [], resistances: [] }) },
   visible: {
     type: Object,
     default: () => ({
       ma5: false, ma10: false, ma20: false, ma60: false,
-      boll: false, ema: true, vol: true, macd: true, rsi: true,
+      boll: false, ema: true, vol: true, macd: true, rsi: true, levels: true,
     }),
   },
 })
@@ -31,6 +33,11 @@ const UP   = '#ef5350'
 const DOWN = '#26a69a'
 const MA_COLORS  = { ma5: '#ff9800', ma10: '#2196f3', ma20: '#e91e63', ma60: '#9c27b0' }
 const BOLL_COLOR = '#8d6e63'
+
+// 关键位配色：支撑=青绿（下方托底），压力=红（上方受阻）
+const SUPPORT_COLOR = '#26a69a'
+const RESIST_COLOR  = '#ef5350'
+const MAX_LEVEL_LINES = 3   // 支撑/压力各最多画几道，防止图面过载
 
 // ── 布局 ──
 const SUB_H    = 130
@@ -247,6 +254,56 @@ function buildLegendHTML(param, vis, margins, h, raw) {
   return html
 }
 
+// ── 关键位选取：最近一道优先，其次按强度，每个方向最多 MAX_LEVEL_LINES 道 ──
+function pickLevels(list) {
+  return [...(list || [])]
+    .filter(lv => lv && isFinite(+lv.price))
+    .sort((a, b) => {
+      if (!!a.is_nearest !== !!b.is_nearest) return a.is_nearest ? -1 : 1
+      return (b.strength || 0) - (a.strength || 0)
+    })
+    .slice(0, MAX_LEVEL_LINES)
+}
+
+// ── 绘制支撑/压力关键位：水平价格线 + 价格轴标签 + pivot K 线标记 ──
+function drawKeyLevels(raw, candleSeries, markerBuf) {
+  const groups = [
+    { list: props.levels?.supports,    isSupport: true  },
+    { list: props.levels?.resistances, isSupport: false },
+  ]
+  for (const { list, isSupport } of groups) {
+    const color = isSupport ? SUPPORT_COLOR : RESIST_COLOR
+    const kind  = isSupport ? '支撑' : '压力'
+
+    for (const lv of pickLevels(list)) {
+      // 最近一道 / MA60 关键位：实线加粗 + 显示价格轴标签；其余虚线弱化
+      const strong = !!lv.is_nearest || !!lv.is_key
+      candleSeries.createPriceLine({
+        price:           +lv.price,
+        color,
+        lineWidth:       strong ? 2 : 1,
+        lineStyle:       strong ? LineStyle.Solid : LineStyle.Dashed,
+        axisLabelVisible: strong,
+        title:           lv.label || kind,
+      })
+
+      // pivot 标记：用 bars_ago 从尾部反推序号，避开 4H 时间戳格式差异
+      if (lv.bars_ago == null) continue
+      const idx = raw.length - 1 - Number(lv.bars_ago)
+      if (!Number.isFinite(idx) || idx < 0 || idx >= raw.length) continue
+      markerBuf.push({
+        idx,
+        position: isSupport ? 'belowBar' : 'aboveBar',
+        color,
+        shape:    isSupport ? 'arrowUp' : 'arrowDown',
+        size:     1,
+        // 强度 >= 2 的位才写文字，避免图面糊成一片
+        ...((lv.strength || 0) >= 2 ? { text: `${kind} ${fmtPrice(lv.price)}` } : {}),
+      })
+    }
+  }
+}
+
 // ── 建图 ──
 function buildChart() {
   if (!containerRef.value) return
@@ -259,6 +316,9 @@ function buildChart() {
   const vis     = props.visible
   const h       = totalHeight.value
   const margins = getMargins(vis, h)
+  // 标记缓冲区：EMA 翻转 + 关键位 pivot 统一按 K 线序号排序后一次性提交，
+  // 避免后一次 setMarkers 覆盖前一次
+  const markerBuf = []
 
   chart = createChart(containerRef.value, {
     width:  containerRef.value.clientWidth,
@@ -320,17 +380,15 @@ function buildChart() {
 
   // ── EMA 飘带 ──
   if (vis.ema) {
-    // 翻转标记
-    const markers = []
+    // 翻转标记（收集进缓冲区，末尾统一提交）
     for (let i = 1; i < raw.length; i++) {
       const p = raw[i - 1], c = raw[i]
       if (!p.ema5 || !p.ema30 || !c.ema5 || !c.ema30) continue
       if (p.ema5 < p.ema30 && c.ema5 >= c.ema30)
-        markers.push({ time: c.date, position: 'belowBar', color: DOWN, shape: 'arrowUp',   text: '转多', size: 1 })
+        markerBuf.push({ idx: i, position: 'belowBar', color: DOWN, shape: 'arrowUp',   text: '转多', size: 1 })
       else if (p.ema5 >= p.ema30 && c.ema5 < c.ema30)
-        markers.push({ time: c.date, position: 'aboveBar', color: UP,   shape: 'arrowDown', text: '转空', size: 1 })
+        markerBuf.push({ idx: i, position: 'aboveBar', color: UP,   shape: 'arrowDown', text: '转空', size: 1 })
     }
-    if (markers.length) candleSeries.setMarkers(markers)
 
     // 填充色带 Primitive（附加到蜡烛图系列，使用主图价格坐标）
     const ema5Data  = raw.filter(d => d.ema5  != null).map(d => ({ time: d.date, value: +d.ema5  }))
@@ -459,6 +517,18 @@ function buildChart() {
     }
   }
 
+  // ── 支撑/压力关键位（水平价格线 + pivot 标记）──
+  if (vis.levels) drawKeyLevels(raw, candleSeries, markerBuf)
+
+  // ── 统一提交标记：按 K 线序号升序（lightweight-charts 的硬性要求）──
+  if (markerBuf.length) {
+    const markers = markerBuf
+      .filter(m => m.idx >= 0 && m.idx < raw.length)
+      .sort((a, b) => a.idx - b.idx)
+      .map(({ idx, ...rest }) => ({ time: raw[idx].date, ...rest }))
+    candleSeries.setMarkers(markers)
+  }
+
   chart.timeScale().fitContent()
 
   // 初始图例（最后一根 K 线）
@@ -492,7 +562,7 @@ onUnmounted(() => {
   chart = null
 })
 
-watch([() => props.data, () => props.visible], buildChart, { deep: true })
+watch([() => props.data, () => props.visible, () => props.levels], buildChart, { deep: true })
 </script>
 
 <style scoped>
