@@ -136,7 +136,7 @@ src/                          # 共 19 个文件
 ```bash
 node scripts/smoke-keylevels.mjs   # K 线支撑压力位标注（14 项）
 node scripts/smoke-ktype.mjs       # 1d/4h/1w 周期切换（12 项）
-node scripts/smoke-livermore.mjs   # 利弗莫尔模块（89 项）
+node scripts/smoke-livermore.mjs   # 利弗莫尔模块（98 项）
 ```
 
 `smoke-livermore.mjs` 覆盖：`/livermore` 四分组切换与表头列自适应、抽屉 5 区块、潮汐过滤开关、

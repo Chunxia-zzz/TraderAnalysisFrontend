@@ -466,7 +466,7 @@ npm run build   # 生成 dist/ 目录
 ```bash
 node scripts/smoke-keylevels.mjs   # K 线支撑压力位标注（14 项）
 node scripts/smoke-ktype.mjs       # 1d/4h/1w 周期切换（12 项）
-node scripts/smoke-livermore.mjs   # 利弗莫尔模块（89 项）
+node scripts/smoke-livermore.mjs   # 利弗莫尔模块（98 项）
 ```
 
 `smoke-livermore.mjs` 的三个关键手法，后续写验收脚本可直接复用：

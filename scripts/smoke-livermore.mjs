@@ -183,7 +183,45 @@ try {
   // 风险分组：表头应是「信号」列而非「强度」列
   check('风险分组表头用「信号」列替代「强度」列', groupProbe[3].hasBadge && !groupProbe[3].hasStrength)
 
-  console.log('\n[5] 回到突破分组并检查行内容')
+  console.log('\n[5] 后端自洽不变量（直接打接口，不经页面）')
+  // ⚠️ 这组断言是为了兜住两类事故：
+  //   ① 后端进程跑着**旧代码**（uvicorn 不带 --reload 时不会加载后续改动）—— 曾实测出
+  //      dangers 出现 ETN×2/EWT×2 且与 near_pivots 重叠，而线上新代码是正确的 11/11；
+  //   ② 分组去重/否决逻辑被改坏（假突破与跌破止损未否决「逼近关键点」）。
+  //    这类问题页面上看不出来（表格照样渲染），必须拿接口数据算交集。
+  const api = await evaluate(send, `(async () => {
+    const r = await fetch('http://127.0.0.1:8000/api/livermore/signals')
+    const d = await r.json()
+    const codes = (g) => (d[g] || []).map(x => x.code)
+    const dup = (a) => [...new Set(a.filter((c, i) => a.indexOf(c) !== i))]
+    const isect = (a, b) => [...new Set(a.filter(c => b.includes(c)))]
+    return {
+      source: d.source,
+      s: d.stats,
+      lens: { breakouts: codes('breakouts').length, near_pivots: codes('near_pivots').length,
+              above_pivot: codes('above_pivot').length, dangers: codes('dangers').length },
+      dangerDup: dup(codes('dangers')),
+      nearDanger: isect(codes('near_pivots'), codes('dangers')),
+      breakDanger: isect(codes('breakouts'), codes('dangers')),
+      dangerSum: (d.stats.dangers_stop || 0) + (d.stats.dangers_failed || 0) + (d.stats.dangers_climax || 0),
+    }
+  })()`)
+
+  check('接口可直连（source=live）', api.source === 'live', `source=${api.source}`)
+  for (const g of ['breakouts', 'near_pivots', 'above_pivot', 'dangers']) {
+    check(`分组「${g}」列表长度 == stats.${g}`,
+      api.lens[g] === api.s[g], `len=${api.lens[g]} stats=${api.s[g]}`)
+  }
+  check('dangers 内 code 无重复（去重逻辑生效）',
+    api.dangerDup.length === 0, `重复=${JSON.stringify(api.dangerDup)}`)
+  check('near_pivots 与 dangers 无交集（假突破/跌破止损已否决「逼近」）',
+    api.nearDanger.length === 0, `交集=${JSON.stringify(api.nearDanger)}`)
+  check('breakouts 与 dangers 无交集', api.breakDanger.length === 0,
+    `交集=${JSON.stringify(api.breakDanger)}`)
+  check('dangers_stop + dangers_failed + dangers_climax == stats.dangers',
+    api.dangerSum === api.s.dangers, `${api.dangerSum} vs ${api.s.dangers}`)
+
+  console.log('\n[6] 回到突破分组并检查行内容')
   await evaluate(send, `document.querySelectorAll('.seg-item')[0].click(); 'ok'`)
   await sleep(700)
   const rowProbe = await evaluate(send, `(() => {
@@ -216,7 +254,7 @@ try {
     console.log('  FAIL 突破分组无数据行，无法校验行内容')
   }
 
-  console.log('\n[6] 抽屉详情')
+  console.log('\n[7] 抽屉详情')
   await evaluate(send, `document.querySelector('.tbl-row').click(); 'ok'`)
   await waitFor(send, `!!document.querySelector('.ant-drawer-content')`, { label: '抽屉打开', timeout: 15_000 })
   await waitFor(send, `!!document.querySelector('.d-block')`, { label: '抽屉内容加载', timeout: 20_000 })
@@ -261,7 +299,7 @@ try {
   await waitFor(send, DRAWER_CLOSED, { label: '抽屉关闭', timeout: 10_000 })
   check('抽屉可正常关闭（不可见）', (await evaluate(send, DRAWER_CLOSED)) === true)
 
-  console.log('\n[7] 潮汐过滤开关')
+  console.log('\n[8] 潮汐过滤开关')
   const beforeToggle = await evaluate(send, `[...document.querySelectorAll('.seg-item em')].map(e => +e.innerText.trim())`)
   await evaluate(send, `(() => { document.querySelector('.toolbar .ant-switch').click(); return 'ok' })()`)
   await waitFor(send, `!document.querySelector('.toolbar-stats .stat-chip:nth-child(5)')`, {
@@ -277,7 +315,7 @@ try {
   await sleep(2500)
   check('潮汐开关可复原', true)
 
-  console.log('\n[8] 截图存证（/livermore）')
+  console.log('\n[9] 截图存证（/livermore）')
   await evaluate(send, `document.querySelectorAll('.seg-item')[0].click(); 'ok'`)
   await sleep(900)
   await screenshot(send, SHOT_A)
@@ -286,7 +324,7 @@ try {
   // ════════════════════════════════════════════════════════════
   // 第二部分：K 线页叠加
   // ════════════════════════════════════════════════════════════
-  console.log(`\n[9] 打开 /chart?code=${CODE}`)
+  console.log(`\n[10] 打开 /chart?code=${CODE}`)
   await goto(send, `${BASE}/chart?code=${CODE}`)
   await waitFor(send, `!!document.querySelector('.lv-grid')`, { label: '利弗莫尔明细卡出现', timeout: 40_000 })
   await waitFor(send, `document.querySelectorAll('.lw-inner canvas').length >= 2`, { label: 'K 线 canvas 渲染', timeout: 30_000 })
@@ -304,7 +342,7 @@ try {
   })()`)
   check('开关旁显示利弗莫尔状态', /已在关键点上方|逼近关键点|关键点下方|箱体震荡中|无有效平台|数据不足/.test(stateHint), `实际="${stateHint}"`)
 
-  console.log('\n[10] K 线页利弗莫尔明细卡')
+  console.log('\n[11] K 线页利弗莫尔明细卡')
   const grid = await evaluate(send, `(() => {
     const items = [...document.querySelectorAll('.lv-item')].map(i => i.innerText.replace(/\\s+/g,' ').trim())
     return {
@@ -347,7 +385,7 @@ try {
   check('利弗莫尔信号标签对比度 >= 3.0', badSig.length === 0,
     badSig.map((c) => `${c.text} ${c.ratio}(${c.fg}/${c.bg})`).join(' ; '))
 
-  console.log('\n[11] 图上水平线（canvas 指纹验证）')
+  console.log('\n[12] 图上水平线（canvas 指纹验证）')
   const fpOn = await evaluate(send, CANVAS_FP)
   check('canvas 指纹可读', fpOn.canvases >= 2 && fpOn.len > 0, JSON.stringify(fpOn))
 
@@ -364,7 +402,7 @@ try {
   check('再次开启后 canvas 恢复为开启态', fpBack.hash === fpOn.hash, `back=${fpBack.hash} on=${fpOn.hash}`)
   check('再次开启后明细卡恢复', (await evaluate(send, `!!document.querySelector('.lv-grid')`)) === true)
 
-  console.log('\n[12] 非日线周期不请求利弗莫尔（4H）')
+  console.log('\n[13] 非日线周期不请求利弗莫尔（4H）')
   await evaluate(send, `(() => {
     const sels = [...document.querySelectorAll('.ant-select-selector')]
     const s = sels[sels.length - 1]
@@ -387,7 +425,7 @@ try {
     console.log('  SKIP 4H 选项未找到，跳过该断言')
   }
 
-  console.log('\n[13] 截图存证（/chart）')
+  console.log('\n[14] 截图存证（/chart）')
   await evaluate(send, `(() => {
     const sels = [...document.querySelectorAll('.ant-select-selector')]
     const s = sels[sels.length - 1]
@@ -405,7 +443,7 @@ try {
   await screenshot(send, SHOT_B)
   console.log(`  截图：${SHOT_B}`)
 
-  console.log('\n[14] 边界：无整理平台的标的')
+  console.log('\n[15] 边界：无整理平台的标的')
   // US.ARM 实测「近 60 根内无有效整理平台」（daily_bars=119，且潮汐向下）
   await goto(send, `${BASE}/chart?code=US.ARM`)
   await waitFor(send, `!!document.querySelector('.lv-grid')`, { label: '明细卡出现（无平台也应有卡）', timeout: 40_000 })
@@ -428,7 +466,7 @@ try {
   check('无平台时 K 线图仍正常渲染（不整体失败）', noPlat.stillHasKline === true)
   check('无平台不影响支撑压力位明细', noPlat.kvRows >= 1, `rows=${noPlat.kvRows}`)
 
-  console.log('\n[15] 边界：港股')
+  console.log('\n[16] 边界：港股')
   await goto(send, `${BASE}/chart?code=HK.01211`)
   await waitFor(send, `!!document.querySelector('.lw-inner canvas')`, { label: '港股 K 线渲染', timeout: 40_000 })
   await sleep(1800)
@@ -447,7 +485,7 @@ try {
     console.log(`  港股利弗莫尔字段：${JSON.stringify(hk.items)}`)
   }
 
-  console.log('\n[16] 页面异常')
+  console.log('\n[17] 页面异常')
   const ignorable = /ResizeObserver loop|Non-Error promise rejection/i
   const realErrors = pageErrors.filter((p) => !ignorable.test(p))
   check('无 JS 异常 / console error', realErrors.length === 0,
