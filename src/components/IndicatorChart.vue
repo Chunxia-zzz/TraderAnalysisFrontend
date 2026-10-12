@@ -14,11 +14,13 @@ const props = defineProps({
   height:  { type: Number, default: 800 },
   // 支撑/压力关键位：{ supports: [...], resistances: [...] }，字段见 /api/analysis
   levels:  { type: Object, default: () => ({ supports: [], resistances: [] }) },
+  // 利弗莫尔关键点：{ levels: [{price, role, label, bars_ago}], panorama: {...} }，见 /api/livermore/detail
+  livermore: { type: Object, default: () => ({ levels: [], panorama: null }) },
   visible: {
     type: Object,
     default: () => ({
       ma5: false, ma10: false, ma20: false, ma60: false,
-      boll: false, ema: true, vol: true, macd: true, rsi: true, levels: true,
+      boll: false, ema: true, vol: true, macd: true, rsi: true, levels: true, livermore: true,
     }),
   },
 })
@@ -38,6 +40,17 @@ const BOLL_COLOR = '#8d6e63'
 const SUPPORT_COLOR = '#26a69a'
 const RESIST_COLOR  = '#ef5350'
 const MAX_LEVEL_LINES = 3   // 支撑/压力各最多画几道，防止图面过载
+
+// 利弗莫尔关键点配色：关键点=深金（与主题 --accent 一致），风险位用红/灰
+const LIV_COLORS = {
+  pivotal:        '#946800',
+  platform_lower: '#8d6e63',
+  stop:           '#a40e26',
+}
+//: 只画这几个 role。刻意**不画 prior_high（前高）**：它通常与 /api/analysis 的压力位几乎重合
+//:（实测 AAPL 前高 344.57 vs 压力 344.30，差 0.08%），两条线叠在一起纯属噪声，前高数值在明细卡里给。
+//: 金字塔 3 道线同样不画，会让图面过载。
+const LIV_MAIN_ROLES = new Set(['pivotal', 'platform_lower', 'stop'])
 
 // ── 布局 ──
 const SUB_H    = 130
@@ -304,6 +317,30 @@ function drawKeyLevels(raw, candleSeries, markerBuf) {
   }
 }
 
+// ── 绘制利弗莫尔关键点：关键点 / 箱体下沿 / 止损三条水平线 ──
+// 与上面的支撑压力位并存但语义不同：这里是「突破触发价」与「离场价」，单向、带量能前提。
+function drawLivermore(candleSeries) {
+  const list = props.livermore?.levels || []
+  if (!list.length) return
+  for (const lv of list) {
+    if (!LIV_MAIN_ROLES.has(lv.role)) continue
+    const price = +lv.price
+    if (!isFinite(price)) continue
+    // ⚠️ lightweight-charts v4 的 `title` **只通过价格轴标签渲染**：
+    //    置 axisLabelVisible=false 等于连标题一起消失 → 想让线「有名字」就必须占一个轴标签。
+    //    因此关键点与止损都占标签（这两条是买入触发价与离场价，最需要认出）；
+    //    箱体下沿只画线、不要名字，避免再挤一格。
+    candleSeries.createPriceLine({
+      price,
+      color:            LIV_COLORS[lv.role] || '#946800',
+      lineWidth:        lv.role === 'pivotal' ? 2 : 1,
+      lineStyle:        lv.role === 'platform_lower' ? LineStyle.Dotted : LineStyle.Dashed,
+      axisLabelVisible: lv.role !== 'platform_lower',
+      title:            lv.label || lv.role,
+    })
+  }
+}
+
 // ── 建图 ──
 function buildChart() {
   if (!containerRef.value) return
@@ -520,6 +557,9 @@ function buildChart() {
   // ── 支撑/压力关键位（水平价格线 + pivot 标记）──
   if (vis.levels) drawKeyLevels(raw, candleSeries, markerBuf)
 
+  // ── 利弗莫尔关键点（关键点/前高/箱体下沿/止损）──
+  if (vis.livermore) drawLivermore(candleSeries)
+
   // ── 统一提交标记：按 K 线序号升序（lightweight-charts 的硬性要求）──
   if (markerBuf.length) {
     const markers = markerBuf
@@ -562,7 +602,7 @@ onUnmounted(() => {
   chart = null
 })
 
-watch([() => props.data, () => props.visible, () => props.levels], buildChart, { deep: true })
+watch([() => props.data, () => props.visible, () => props.levels, () => props.livermore], buildChart, { deep: true })
 </script>
 
 <style scoped>

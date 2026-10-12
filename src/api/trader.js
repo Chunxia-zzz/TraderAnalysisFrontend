@@ -34,6 +34,20 @@ export const getScoresOverview = (date) =>
 export const getEmaCrossSignals = (date) =>
   client.get('/api/ema-cross-signals', { params: { ...(date ? { date } : {}) } })
 
+// ── 利弗莫尔关键点信号（独立体系，不并入 total_score）──
+export const getLivermoreSignals = ({ date, source, allTide, refresh } = {}) =>
+  client.get('/api/livermore/signals', {
+    params: {
+      ...(date ? { date } : {}),
+      ...(source && source !== 'live' ? { source } : {}),
+      ...(allTide ? { all: 1 } : {}),
+      ...(refresh ? { refresh: 1 } : {}),
+    },
+    timeout: 30000,
+  })
+export const getLivermoreDetail = (code) =>
+  client.get('/api/livermore/detail', { params: { code } })
+
 // ── 市场温度 ──
 export const getMarketTemperature = () => client.get('/api/market-temperature')
 export const getMarketTemperatureHistory = (days = 30) =>

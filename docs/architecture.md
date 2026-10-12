@@ -19,8 +19,9 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 |------|------|
 | 查看市场温度 | 综合评分（3 维度加权），判断市场当前处于恐慌/中性/贪婪状态，给出仓位建议 |
 | 交易信号 | 空转多/多转空（EMA5/30 交叉）+ 主升浪龙头 + 主跌浪超卖 + 低估做多机会 |
+| 利弗莫尔关键点 | **独立信号体系**：整理平台上沿突破/逼近/已在关键点上方/风险四分组，与 6 因子评分方向相反、不合并 |
 | 个股技术分析 | 道氏三层趋势 + 支撑压力关键位 + 形态置信度 + 盈亏比 + 6 因子评分 |
-| 查看 K 线图 | 选择标的和周期（4H/日K/周K），蜡烛图 + 多窗格指标 + **支撑压力位标注** |
+| 查看 K 线图 | 选择标的和周期（4H/日K/周K），蜡烛图 + 多窗格指标 + **支撑压力位标注** + **利弗莫尔关键点叠加** |
 | 信号回测 | 3 种策略模式历史回测验证（趋势跟踪/买入持有/波段操作） |
 | 市场复盘 | 日/周复盘报告 + 自媒体文案生成（小红书/知乎/公众号） |
 | 我的持仓 | 实时持仓查询（依赖本机 OpenD） |
@@ -76,10 +77,10 @@ TraderAnalysisFrontend/
 ├── docs/                         # 文档目录
 │   └── architecture.md           # 本文件
 │
-└── src/                          # 源代码（共 18 个文件）
+└── src/                          # 源代码（共 19 个文件）
     ├── main.js                   # 应用入口
     ├── App.vue                   # 根组件（顶部导航 + 下拉菜单 + 健康检查）
-    ├── router/index.js           # 路由配置
+    ├── router/index.js           # 路由配置（11 条已注册）
     ├── api/trader.js             # API 调用层
     ├── styles/
     │   ├── theme.js              # ant-design-vue 主题 token
@@ -89,8 +90,9 @@ TraderAnalysisFrontend/
     └── views/                    # 页面（★ = 已在 router 注册）
         ├── Home.vue              # ★ 首页（价值投资理念）
         ├── MarketTemperature.vue # ★ 市场温度仪表盘
-        ├── Chart.vue             # ★ 个股历史K线（含支撑压力位标注）
+        ├── Chart.vue             # ★ 个股历史K线（支撑压力位 + 利弗莫尔关键点叠加）
         ├── MomentumLeaders.vue   # ★ 交易信号（空转多/多转空/主升浪/主跌浪/低估做多）
+        ├── Livermore.vue         # ★ 利弗莫尔关键点（独立信号体系）
         ├── Dashboard.vue         # ★ 个股技术分析
         ├── Backtest.vue          # ★ 信号回测（3 策略模式）
         ├── WatchlistManage.vue   # ★ 标的池管理
@@ -101,13 +103,14 @@ TraderAnalysisFrontend/
 ```
 
 > ⚠️ **勘误（2026-10-12）**：本树此前列出 `GridTrading.vue` / `Login.vue` / `StockFilter.vue` / `Settings.vue` / `components/KLineChart.vue`，
-> 这些文件**在仓库中均不存在**（`find src -type f` 可验），已从文档删除。实测 `src/` 下只有 18 个文件、`components/` 下只有 `IndicatorChart.vue` 一个组件。
+> 这些文件**在仓库中均不存在**（`find src -type f` 可验），已从文档删除。实测 `src/` 下 19 个文件（新增 `Livermore.vue` 后）、
+> `components/` 下只有 `IndicatorChart.vue` 一个组件。
 
 ---
 
 ## 4. 认证系统
 
-> **v2.8+ 状态：认证暂时禁用。** 所有页面公开访问，无路由守卫，无 token 管理。
+> **v2.8+ 状态：认证已彻底移除。** 所有页面公开访问，无路由守卫，无 token 管理。
 > `src/api/trader.js` 的 axios 实例**没有任何认证拦截器**，`localStorage` 中也不存 token。
 >
 > ⚠️ **勘误（2026-10-12）**：本节此前写「Login.vue 和相关拦截器代码保留在代码库中，待后端恢复认证后可重新启用」——
@@ -126,6 +129,7 @@ TraderAnalysisFrontend/
 | `/market-temperature` | MarketTemperature.vue | 市场温度仪表盘 |
 | `/chart` | Chart.vue | 个股历史K线（含支撑压力位标注） |
 | `/momentum-leaders` | MomentumLeaders.vue | 交易信号（空转多/多转空、主升浪龙头、主跌浪超卖、低估做多） |
+| `/livermore` | Livermore.vue | 利弗莫尔关键点（独立信号体系；四分组 + 抽屉详情） |
 | `/dashboard` | Dashboard.vue | 个股技术分析 |
 | `/backtest` | Backtest.vue | 信号回测（3 种策略模式） |
 | `/watchlist-manage` | WatchlistManage.vue | 标的池管理 |
@@ -198,11 +202,14 @@ TraderAnalysisFrontend/
 
 ### 6.5 Chart.vue — K 线图查询页
 
-**API 调用：** `GET /api/indicators`（K 线+指标） + `GET /api/analysis`（关键位） + `GET /api/watchlist`
+**API 调用：** `GET /api/indicators`（K 线+指标） + `GET /api/analysis`（关键位） + `GET /api/livermore/detail`（利弗莫尔关键点） + `GET /api/watchlist`
 
 标的选择器 + 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动，指标可切换显隐。
 
-> `/api/indicators` 与 `/api/analysis` **并行拉取**（`Promise.all`），关键位请求失败只清空关键位数据、不影响 K 线渲染。
+> `/api/indicators`、`/api/analysis`、`/api/livermore/detail` **三路并行拉取**（`Promise.all`），
+> 后两者各自 `catch` → `null`，任一失败只清空对应数据、不影响 K 线渲染。
+> **利弗莫尔只在 `ktype === '1d'` 时请求**：其箱体、周线潮汐、ATR 全部建立在日线尺度上，
+> 4H/1W 下画出来的水平线会与当前周期语义不符，索性不请求（省一次往返）。
 
 **EMA多空带：** 显示 ema5~ema30 共6条均线，ema5>ema30区域填充浅红(多头)，ema5<ema30区域填充浅绿(空头)。
 
@@ -223,6 +230,20 @@ TraderAnalysisFrontend/
 | 明细卡片 | 图表下方支撑/压力双栏：价格、label、距现价 pct、强度、MA60/最近徽章、道氏上下文 + 盈亏比区域 |
 
 > ⚠️ **`setMarkers()` 每次调用会覆盖前值**。EMA 转多/转空标记与关键位 pivot 标记必须统一写入缓冲区，按 K 线序号升序**一次性提交**，分成两次调用会丢标记。
+
+**利弗莫尔关键点叠加（2026-10-12 新增）：**
+
+> ⚠️ 与上面的「支撑压力位」**并存但语义不同**：这里是「突破触发价」与「离场价」，单向、带量能前提。
+> 页面上两块并排展示并在卡片底部明确写了「两者算法不同，勿混称」。
+
+| 元素 | 说明 |
+|---|---|
+| 水平线 | 只画 3 个 role：`pivotal`（关键点，深金 `#946800`，加粗虚线）/ `platform_lower`（箱体下沿，褐色 `#8d6e63` 点线）/ `stop`（止损，暗红 `#a40e26` 虚线） |
+| **刻意不画** | `prior_high`（通常与压力位几乎重合 — 实测 AAPL 前高 344.57 vs 压力 344.30，差 0.08%）与 `pyramid_1..3`（3 道线会让图面过载） |
+| 价格轴标签 | **只有 `pivotal` 与 `stop`** 占标签。⚠️ lightweight-charts v4 的 `title` **只通过价格轴标签渲染**，置 `axisLabelVisible = false` 等于连标题一起消失 → 想让线「有名字」就必须占一格 |
+| 开关 | `visible.livermore`，默认开；关闭后图表水平线与下方明细卡片**同时隐藏** |
+| 明细卡片 | 6 个字段：关键点（含距现价%）/ 状态（含反转 or 连续关键点）/ 整理箱体（上下沿 + 根数 + 振幅）/ 止损位（0.5×ATR）/ 周线潮汐（含波浪与 MA 周期）/ 量能·相对强度（量比 + RS60 + ★龙头）；下方是金字塔加仓位（3 级，已到的标红）与当前信号标签 |
+| 无有效平台时 | 卡片收窄为「原因提示 + 周线潮汐 + 数据深度」两个字段，**不渲染一整片 `--` 占位**（此时 API 的 `levels` 为空数组，图上一条线都不画） |
 
 ### 6.6 Dashboard.vue — 个股技术分析
 
@@ -280,6 +301,47 @@ TraderAnalysisFrontend/
 
 > ⚠️ 此前写「条件选股(StockFilter.vue)和设置(Settings.vue)暂时隐藏，代码保留」——**这两个文件在仓库中不存在**，功能是彻底移除而非隐藏（2026-10-12 更正）。
 
+### 6.11 Livermore.vue — 利弗莫尔关键点（2026-10-12 新增）
+
+**API 调用：** `GET /api/livermore/signals`（列表） + `GET /api/livermore/detail`（抽屉详情）
+
+> ⚠️ **这是独立信号体系**，与 6 因子评分 `total_score` **方向相反**（评分买超卖、本页买突破）。
+> 信号不并入评分、独立落 `livermore_signal_log`、独立接口。页面顶部口径说明卡第 4 行专门写了「⚠️ 独立体系」。
+
+**页面结构（自上而下）：**
+
+| 区块 | 说明 |
+|---|---|
+| 工具栏 | 日期选择器（`allowClear`，清空=最新）/ 潮汐过滤开关 / 刷新按钮 / `?` 口径提示 + 右侧统计 chip（突破·逼近·上方·风险·被潮汐挡） |
+| 口径说明卡 | 4 行：关键点定义（箱体内**收盘价**最高点）/ 两类关键点（反转 vs 连续）/ 配套规则（量比≥1.5、潮汐顺势、止损 0.5×ATR、金字塔 1/2/3×ATR）/ **⚠️ 独立体系** |
+| 结论条 | 扫描 `N/M` 只、无平台数、突破数（连续/反转）、逼近数、风险数、潮汐分布（涨/退/不明）、龙头数、基准 SPY 60 日 |
+| 分组切换 | `seg` 自定义控件（非 ant 组件），带计数与分组说明；**表头列随分组自适应** |
+| 表格 | 排名 / 代码（★ 标龙头）/ 名称 / 现价 / 关键点 / 距关键点 / 箱体 / 量比 / 潮汐·波浪 / RS60 / 强度（含进度条）；每行右侧「K线」按钮跳 `/chart?code=` |
+| 抽屉详情 | 5 块：当前信号（含 `detail.action`）→ 关键点全景 → 金字塔加仓位 → 趋势与相对强度 → 「打开 K 线图」 |
+
+**四个分组与表头自适应：**
+
+| 分组 | `countKey` | 表头差异 | 说明 |
+|---|---|---|---|
+| 关键点突破 | `breakouts` | 标准列 | 收盘首次越过整理平台上沿 —— 利弗莫尔的买点，放量确认才可靠 |
+| 逼近关键点 | `near` | 标准列 | 在关键点下方 2% 以内，尚未突破 —— 预备名单 |
+| 已在关键点上方 | `above` | 标准列 | 已突破并延续（突破后 2 根以上）—— 回踩关键点不破可加仓 |
+| 风险信号 | `dangers` | **隐藏「箱体」与「强度」列，改显示「信号」列** | 假突破收回 / 跌破关键点止损 / 高位放量滞涨 —— 应减仓或离场 |
+
+**交互细节：**
+
+- 切换分组时若该分组无数据，**自动跳到第一个有内容的分组**（避免用户看到空白以为是 bug）
+- 空态文案按分组区分（不是统一的"暂无数据"）
+- 潮汐过滤开关对应 `?all=1`：关闭后做多信号数**只增不减**（风险信号不受潮汐限制）
+- 抽屉里 `pano.pivotal` 为空时改显示 `skip_reason` 警告，不渲染整片占位
+
+**踩坑（已固化在 `scripts/smoke-livermore.mjs`）：**
+
+- ⚠️ **激活分组文字会隐形**：`.seg-item.active:not(.danger)` 曾用 `color: var(--text)` 配
+  `background: var(--bg-emphasis)`，本主题里两者**都是 `#1f2328`** → 必须用浅色前景。验收脚本已加对比度断言兜底
+- ant-design 在两个中文字之间会**自动插空格**（按钮文本实际是「查 询」），脚本里按文本匹配前须去空白
+- ant-design 的 Drawer 关闭后**不移除 DOM 节点**，只能按可见性断言，不能断言节点消失
+
 ---
 
 ## 7. API 调用层
@@ -316,6 +378,8 @@ TraderAnalysisFrontend/
 | 止盈止损 | `getTpSl(code, params?)` | `GET /api/tp-sl` | ScoresOverview |
 | 信号回测 | `getBacktestRun(params)` | `GET /api/backtest/run` | Backtest |
 | **技术分析** | **`getAnalysis(code, date?, ktype?)`** | **`GET /api/analysis`** | **Dashboard / Chart** |
+| **利弗莫尔** | **`getLivermoreSignals({date?, source?, allTide?, refresh?})`** | **`GET /api/livermore/signals`** | **Livermore** |
+| **利弗莫尔** | **`getLivermoreDetail(code)`** | **`GET /api/livermore/detail`** | **Chart / Livermore** |
 | 交易信号 | `getTradeSignals(code, date?)` | `GET /api/trade-signals` | ⚠️ 无页面引用 |
 | 交易信号 | `getBottomSignals(code, days)` | `GET /api/bottom-signals` | ⚠️ 无页面引用 |
 | 基本面 | `getFundamental(code, date?)` | `GET /api/fundamental` | Dashboard |
@@ -332,7 +396,7 @@ TraderAnalysisFrontend/
 > ⚠️ **勘误（2026-10-12）**：本文档此前列出 `getFundamentalLatest` / `getFundamentalOverview` / `stockFilterSearch` / `stockFilterInfo` / `getGridStatus` / `getGridOrders`，**`src/api/trader.js` 中均不存在**，已删除。
 > 连带处理：唯一引用前两者的 `views/Fundamental.vue` 是悬空引用（其依赖的后端端点也不存在）→ **该文件已于 2026-10-12 删除**，详见 §6.7。
 >
-> 超时设置：`getBacktestRun` / `getDailyPicks` / `getContentGenerator` / `getReview` / `getPosition` / `getAllocation` / `saveAllocationConfig` 为 30s，其余走默认 10s。
+> 超时设置：`getBacktestRun` / `getDailyPicks` / `getContentGenerator` / `getReview` / `getPosition` / `getAllocation` / `saveAllocationConfig` / **`getLivermoreSignals`（全池扫描实测 2.1s，含缓存）** 为 30s，其余走默认 10s。
 
 ---
 
@@ -349,7 +413,8 @@ TraderAnalysisFrontend/
 | `data` | Array | `[]` | `/api/indicators` 返回的 `data` 数组 |
 | `height` | Number | `800` | 期望高度，实际高度由 `totalHeight` 取大值决定 |
 | `levels` | Object | `{supports:[], resistances:[]}` | 支撑压力位，字段见 `/api/analysis` |
-| `visible` | Object | 各指标显隐，`levels` 默认 `true` | `ma5/ma10/ma20/ma60/boll/ema/vol/macd/rsi/levels` |
+| `livermore` | Object | `{levels:[], panorama:null}` | 利弗莫尔关键点，字段见 `/api/livermore/detail`（**只用到 `levels`**，`panorama` 由 `Chart.vue` 的明细卡消费） |
+| `visible` | Object | 各指标显隐，`levels` / `livermore` 默认 `true` | `ma5/ma10/ma20/ma60/boll/ema/vol/macd/rsi/levels/livermore` |
 
 **布局：** 主图最少 `MAIN_MIN = 360`，每个副图 `SUB_H = 130`，总高 `max(height, 360 + 副图数 × 130)`。副图纵向位置由 `getMargins()` 计算 `scaleMargins` 得出。
 
@@ -362,6 +427,10 @@ TraderAnalysisFrontend/
 **标记机制（关键约束）：** `setMarkers()` 每次调用**覆盖**前值。EMA 转多/转空标记与关键位 pivot 标记统一推入 `markerBuf`，最后按 K 线序号升序**一次性提交**；分两次调用会丢标记。
 
 **支撑压力位：** 见 §6.5「支撑压力位标注」。要点：`pickLevels()` 按「最近一道 > 强度」取前 `MAX_LEVEL_LINES = 3` 道；强位（`is_nearest` 或 `is_key`）用实线加粗 + 显示轴标签，弱位用虚线不显标签；pivot 标记用 `bars_ago` 反推序号定位。
+
+**利弗莫尔关键点（`drawLivermore()`）：** 见 §6.5「利弗莫尔关键点叠加」。要点：`LIV_MAIN_ROLES` 白名单只放 `pivotal` / `platform_lower` / `stop`（**不含 `prior_high` 与金字塔位**，理由见 §6.5 表格），配色在 `LIV_COLORS`；因为 v4 的 `title` 只能靠价格轴标签渲染，所以 `axisLabelVisible` 为 `role !== 'platform_lower'`。
+
+**`watch` 依赖：** `[() => props.data, () => props.visible, () => props.levels, () => props.livermore]`（`deep: true`）—— 新增数据源时**必须一并加进 watch**，否则切换开关不重绘。
 
 ---
 
@@ -377,7 +446,7 @@ npm run dev   # http://localhost:5173
 ### 9.2 新增页面步骤
 
 1. 在 `src/views/` 创建 `.vue` 文件
-2. 在 `src/router/index.js` 添加路由（需认证的不加 `meta: { public: true }`）
+2. 在 `src/router/index.js` 添加路由（**没有 `meta` 概念** —— 认证体系已彻底移除，无路由守卫、无需 `meta: { public: true }`）
 3. 在 `src/App.vue` 导航栏添加链接
 4. 如需新接口，在 `src/api/trader.js` 添加函数
 
@@ -388,3 +457,24 @@ npm run build   # 生成 dist/ 目录
 ```
 
 `dist/` 是纯静态文件，可用 Nginx/Caddy 托管。API 请求需通过反向代理转发到后端。
+
+### 9.4 端到端验收（零依赖 CDP）
+
+`scripts/` 下是自包含的浏览器验收脚本，用本机 Chrome + Node 内置 WebSocket 驱动，**不装任何 npm 依赖**。
+前置：前端 5173 与后端 8000 都在运行。
+
+```bash
+node scripts/smoke-keylevels.mjs   # K 线支撑压力位标注（14 项）
+node scripts/smoke-ktype.mjs       # 1d/4h/1w 周期切换（12 项）
+node scripts/smoke-livermore.mjs   # 利弗莫尔模块（89 项）
+```
+
+`smoke-livermore.mjs` 的三个关键手法，后续写验收脚本可直接复用：
+
+| 手法 | 解决的问题 |
+|---|---|
+| **canvas 指纹**（`toDataURL()` 抽稀采样成整数哈希） | 水平线画在 canvas 上，DOM 里查不到 → 关开关前后比较指纹，**证明线确实被绘制**，而非只是"没报错" |
+| **WCAG 对比度断言**（背景色按 alpha 逐层合成到 body） | 兜住「前景色 == 背景色 → 文字隐形」这类主题变量误用（本次真抓到过一次） |
+| **边界标的断言** | 无整理平台的 `US.ARM`（不出现 `--` 占位、字段收窄为 2）、港股 `HK.01211`、4H 周期不请求利弗莫尔 |
+
+截图输出到 `F:/TraderAnalysis/logs/`（`livermore-page.png` / `livermore-chart.png`）。

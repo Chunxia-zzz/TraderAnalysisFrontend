@@ -22,6 +22,11 @@ const routes = [
     component: () => import('../views/MomentumLeaders.vue'),
   },
   {
+    path: '/livermore',
+    name: 'livermore',
+    component: () => import('../views/Livermore.vue'),
+  },
+  {
     path: '/dashboard',
     name: 'dashboard',
     component: () => import('../views/Dashboard.vue'),
