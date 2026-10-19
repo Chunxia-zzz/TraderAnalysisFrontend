@@ -21,6 +21,7 @@
               <div class="hero-sub">/ 100</div>
               <span class="status-pill" :style="pillStyle(data.composite_score)">{{ getLevel(data.composite_score).label }}</span>
               <div class="hero-action">{{ getLevel(data.composite_score).action }}</div>
+              <div class="hero-note">分数越高 = 越恐慌 = 越值得加仓（与个股评分同向）</div>
             </div>
             <div class="hero-right">
               <div v-for="dim in activeDimensions" :key="dim.key" class="dim-block">
@@ -106,6 +107,7 @@
                 <div class="hero-sub">/ 100</div>
                 <span class="status-pill" :style="pillStyle(asset.composite_score)">{{ getLevel(asset.composite_score).label }}</span>
                 <div class="hero-action">{{ getLevel(asset.composite_score).action }}</div>
+                <div class="hero-note">分数越高 = 越恐慌 = 越值得加仓（与个股评分同向）</div>
               </div>
               <div class="hero-right">
                 <div v-for="dim in ASSET_DIMS" :key="dim.key" class="dim-block">
@@ -193,15 +195,16 @@ const TABS = [
   { key: 'btc',    label: '比特币',   cls: 'orange' },
 ]
 
+// 高分=恐慌=加仓机会（2026-10-19 镜像反转，与个股评分 total_score 同向）
 const TEMPERATURE_LEVELS = [
-  { max: 5,   label: '极端恐慌', action: '融资+期权超配' },
-  { max: 15,  label: '极度恐慌', action: '重仓逆势买入' },
-  { max: 30,  label: '偏悲观',   action: '积极加仓' },
-  { max: 45,  label: '略偏冷',   action: '适度加仓' },
-  { max: 55,  label: '中性',     action: '维持仓位' },
-  { max: 70,  label: '略偏热',   action: '适度减仓' },
-  { max: 85,  label: '偏贪婪',   action: '积极减仓' },
-  { max: 100, label: '极度贪婪', action: '大幅减仓' },
+  { min: 95,  label: '极端恐慌', action: '融资+期权超配' },
+  { min: 85,  label: '极度恐慌', action: '重仓逆势买入' },
+  { min: 70,  label: '偏悲观',   action: '积极加仓' },
+  { min: 55,  label: '略偏冷',   action: '适度加仓' },
+  { min: 45,  label: '中性',     action: '维持仓位' },
+  { min: 30,  label: '略偏热',   action: '适度减仓' },
+  { min: 15,  label: '偏贪婪',   action: '积极减仓' },
+  { min: 0,   label: '极度贪婪', action: '大幅减仓' },
 ]
 
 const MARKET_DIMS = [
@@ -230,21 +233,22 @@ let assetChartInstance = null
 
 // ── 工具函数 ──
 function getLevel(score) {
-  return TEMPERATURE_LEVELS.find(l => score <= l.max) || TEMPERATURE_LEVELS[7]
+  return TEMPERATURE_LEVELS.find(l => score >= l.min) || TEMPERATURE_LEVELS[7]
 }
 
+// 高分=恐慌=加仓机会→蓝；低分=贪婪→红
 function pillStyle(score) {
-  if (score <= 30) return { color: 'var(--blue)',           background: '#e3f0ff' }
-  if (score <= 55) return { color: 'var(--text-secondary)', background: 'var(--bg-hover)' }
-  if (score <= 75) return { color: 'var(--accent)',         background: 'var(--accent-bg)' }
+  if (score >= 70) return { color: 'var(--blue)',           background: '#e3f0ff' }
+  if (score >= 45) return { color: 'var(--text-secondary)', background: 'var(--bg-hover)' }
+  if (score >= 25) return { color: 'var(--accent)',         background: 'var(--accent-bg)' }
   return                  { color: 'var(--red)',            background: 'var(--red-bg)' }
 }
 
 function dimColor(score) {
   if (score == null) return 'var(--text-muted)'
-  if (score <= 30) return 'var(--blue)'
-  if (score <= 55) return 'var(--text-muted)'
-  if (score <= 75) return 'var(--accent)'
+  if (score >= 70) return 'var(--blue)'
+  if (score >= 45) return 'var(--text-muted)'
+  if (score >= 25) return 'var(--accent)'
   return 'var(--red)'
 }
 
@@ -302,9 +306,9 @@ function renderChart() {
         name: '综合评分', type: 'line', data: scores, smooth: true,
         itemStyle: { color: '#0550ae' }, lineStyle: { color: '#0550ae' },
         markArea: { silent: true, data: [
-          [{ yAxis: 0,  itemStyle: { color: 'rgba(5,80,174,0.04)'   } }, { yAxis: 30  }],
+          [{ yAxis: 70, itemStyle: { color: 'rgba(5,80,174,0.04)'   } }, { yAxis: 100 }],
           [{ yAxis: 30, itemStyle: { color: 'rgba(139,148,158,0.04)' } }, { yAxis: 70  }],
-          [{ yAxis: 70, itemStyle: { color: 'rgba(164,14,38,0.04)'  } }, { yAxis: 100 }],
+          [{ yAxis: 0,  itemStyle: { color: 'rgba(164,14,38,0.04)'  } }, { yAxis: 30  }],
         ]},
       },
       {
@@ -332,9 +336,9 @@ function renderAssetChart(viewKey) {
       name: '综合评分', type: 'line', data: history.map(d => d.composite_score), smooth: true,
       itemStyle: { color }, lineStyle: { color },
       markArea: { silent: true, data: [
-        [{ yAxis: 0,  itemStyle: { color: 'rgba(5,80,174,0.04)'   } }, { yAxis: 30  }],
+        [{ yAxis: 70, itemStyle: { color: 'rgba(5,80,174,0.04)'   } }, { yAxis: 100 }],
         [{ yAxis: 30, itemStyle: { color: 'rgba(139,148,158,0.04)' } }, { yAxis: 70  }],
-        [{ yAxis: 70, itemStyle: { color: 'rgba(164,14,38,0.04)'  } }, { yAxis: 100 }],
+        [{ yAxis: 0,  itemStyle: { color: 'rgba(164,14,38,0.04)'  } }, { yAxis: 30  }],
       ]},
     }],
   })
@@ -442,6 +446,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
 }
 .hero-action { font-size: 13px; color: var(--text-secondary); }
+.hero-note  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
 .hero-right {
   display: flex;
