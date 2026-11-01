@@ -4,7 +4,7 @@
 // 用法：node scripts/smoke-livermore.mjs
 import {
   connect, evaluate, goto, launchChrome, screenshot, shutdown, waitFor,
-} from 'file:///C:/Users/Administrator/.workbuddy/skills/cdp-ui-smoke/assets/cdp.mjs'
+} from './lib/cdp.mjs'
 
 const BASE = process.env.TA_UI_BASE || 'http://127.0.0.1:5173'
 const CODE = process.env.TA_UI_CODE || 'US.AAPL'

@@ -1,5 +1,5 @@
 // 诊断：.lw-outer 内所有可见后代元素的位置与文本，确认左边缘是否有 DOM 文本溢出
-import { connect, evaluate, goto, launchChrome, shutdown, waitFor } from 'file:///C:/Users/Administrator/.workbuddy/skills/cdp-ui-smoke/assets/cdp.mjs'
+import { connect, evaluate, goto, launchChrome, shutdown, waitFor } from './lib/cdp.mjs'
 
 const BASE = process.env.TA_UI_BASE || 'http://127.0.0.1:5173'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

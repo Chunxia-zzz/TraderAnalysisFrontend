@@ -1,7 +1,7 @@
 // 边界验收：切 4H 周期（本次新开放）+ 数据稀疏标的的降级路径
 // 注意：本页设计为「改条件后需点查询才重新拉数据」，所以切周期后必须点查询，
 //       否则读到的是上一个周期的数据（会假通过）。
-import { connect, evaluate, goto, launchChrome, screenshot, shutdown, waitFor } from 'file:///C:/Users/Administrator/.workbuddy/skills/cdp-ui-smoke/assets/cdp.mjs'
+import { connect, evaluate, goto, launchChrome, screenshot, shutdown, waitFor } from './lib/cdp.mjs'
 
 const BASE = process.env.TA_UI_BASE || 'http://127.0.0.1:5173'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
