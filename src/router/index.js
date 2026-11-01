@@ -46,15 +46,20 @@ const routes = [
     name: 'review',
     component: () => import('../views/Review.vue'),
   },
+  // 已下线（2026-11-02）：旧地址保留重定向，避免书签/历史记录打开后白屏。
+  // 见 specs/002-retire-position-allocation/
   {
     path: '/position',
-    name: 'position',
-    component: () => import('../views/Position.vue'),
+    redirect: '/',
   },
   {
     path: '/allocation',
-    name: 'allocation',
-    component: () => import('../views/Allocation.vue'),
+    redirect: '/',
+  },
+  {
+    path: '/scores-overview',
+    name: 'scores-overview',
+    component: () => import('../views/ScoresOverview.vue'),
   },
 ]
 

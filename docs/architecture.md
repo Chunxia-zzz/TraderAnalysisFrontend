@@ -24,8 +24,6 @@ TraderAnalysis 是一个股票技术分析系统。后端（FastAPI）负责获�
 | 查看 K 线图 | 选择标的和周期（4H/日K/周K），蜡烛图 + 多窗格指标 + **支撑压力位标注** + **利弗莫尔关键点叠加** |
 | 信号回测 | **5 种策略模式**历史回测验证（趋势跟踪/买入持有/波段操作/EMA飘带多头/EMA飘带空头） |
 | 市场复盘 | 日/周复盘报告 + 自媒体文案生成（小红书/知乎/公众号） |
-| 我的持仓 | 实时持仓查询（依赖本机 OpenD） |
-| 目标仓位 | 永久投资组合目标 vs 实际对比 + **五级**加仓建议（依赖本机 OpenD） |
 | 标的池管理 | 增删改查标的，筛选/搜索，晨星折价排序，刷新快照 |
 
 ---
@@ -85,7 +83,7 @@ TraderAnalysisFrontend/
 └── src/                          # 源代码（共 19 个文件）
     ├── main.js                   # 应用入口
     ├── App.vue                   # 根组件（顶部导航 + 下拉菜单 + 健康检查）
-    ├── router/index.js           # 路由配置（11 条已注册）
+    ├── router/index.js           # 路由配置（12 条已注册）
     ├── api/trader.js             # API 调用层
     ├── styles/
     │   ├── theme.js              # ant-design-vue 主题 token
@@ -102,9 +100,7 @@ TraderAnalysisFrontend/
         ├── Backtest.vue          # ★ 信号回测（5 种策略模式）
         ├── WatchlistManage.vue   # ★ 标的池管理
         ├── Review.vue            # ★ 市场复盘 + 自媒体文案
-        ├── Position.vue          # ★ 我的持仓（依赖 OpenD）
-        ├── Allocation.vue        # ★ 目标仓位（依赖 OpenD）
-        └── ScoresOverview.vue    # 机会速览（未挂载）
+        └── ScoresOverview.vue    # ★ 机会速览（按评分分档 + 止盈损）
 ```
 
 > ⚠️ **勘误（2026-10-12）**：本树此前列出 `GridTrading.vue` / `Login.vue` / `StockFilter.vue` / `Settings.vue` / `components/KLineChart.vue`，
@@ -139,13 +135,14 @@ TraderAnalysisFrontend/
 | `/backtest` | Backtest.vue | 信号回测（5 种策略模式） |
 | `/watchlist-manage` | WatchlistManage.vue | 标的池管理 |
 | `/review` | Review.vue | 市场复盘 + 自媒体文案生成 |
-| `/position` | Position.vue | 我的持仓（依赖 OpenD） |
-| `/allocation` | Allocation.vue | 目标仓位（依赖 OpenD） |
+
+> 另有 **2 条下线重定向**：`/position`、`/allocation` → `/`（2026-11-02 下线「持仓配置」功能，
+> 保留墓碑以免书签/历史记录打开白屏，见 `specs/002-retire-position-allocation/`）。
 
 所有路由使用懒加载（`() => import(...)`）。
 
 > ⚠️ 本文档此前列出 `/scores-overview`、`/fundamental`、`/grid-trading` **三条已不在 `router/index.js` 中的路由**，且漏记 `/momentum-leaders`、`/review`、`/position`、`/allocation`，已于 2026-10-12 更正。
-> 未注册路由但源文件仍在 `src/views/` 的**只有 `ScoresOverview.vue`**。
+> ✅ **勘误（2026-11-01）**：`ScoresOverview.vue` 的路由已注册（见 §6.4），当前**没有**未注册的 view 文件。
 > （`Fundamental.vue` / `GridTrading.vue` / `Login.vue` / `StockFilter.vue` / `Settings.vue` 的文件在仓库中已不存在，见各节勘误。）
 > `Fundamental.vue` 已于 2026-10-12 删除，原因见 §6.7。
 
@@ -157,10 +154,11 @@ TraderAnalysisFrontend/
   导航选中态用 `--bg-hover` 背景 + `font-weight: 600`，全程无蓝色高亮（见 `App.vue` 的 `.nav-item.router-link-active`）
 - 内容区域最大宽度 1400px 居中
 - 后端状态指示灯（绿/红点，`getHealth()` 轮询一次，`onMounted` 时调用）
-- 导航项顺序：市场温度 / 交易信号（平级链接 → `/momentum-leaders`）/ 利弗莫尔 / **个股分析 ▾** / 信号回测 / **持仓配置 ▾** / 市场复盘（带 `beta` 徽标）/ 标的管理 + 健康指示灯
-- 真正带 ▾ 的下拉**只有 2 个**：
+- 导航项顺序：市场温度 / 交易信号（平级链接 → `/momentum-leaders`）/ 利弗莫尔 / **个股分析 ▾** / 信号回测 / 市场复盘（带 `beta` 徽标）/ 标的管理 + 健康指示灯
+- 真正带 ▾ 的下拉**只有 1 个**：
   - 「个股分析」**仅 2 项**：个股技术分析 `/dashboard`、个股历史K线 `/chart`（早期文档写的"基本面"入口代码中不存在）
-  - 「持仓配置」2 项：我的持仓 `/position`、目标仓位 `/allocation`
+- 「持仓配置」下拉（我的持仓 `/position` / 目标仓位 `/allocation`）已于 2026-11-02 下线，
+  旧地址重定向到首页。见 `specs/002-retire-position-allocation/`
 
 ---
 
@@ -235,7 +233,10 @@ TraderAnalysisFrontend/
 3. **资产历史趋势图**（ECharts）
 4. **技术指标卡（6 项）** — 当前价格 / 日线 RSI6 / 周线 RSI6 / MA200 偏离 / ATH 回撤 / 52 周位置 + 备注文案
 
-### 6.4 ScoresOverview.vue — 机会速览（⚠️ 未挂载路由）
+### 6.4 ScoresOverview.vue — 机会速览
+
+> ✅ **勘误（2026-11-01）**：该路由已在 `router/index.js` 注册（`/scores-overview`），死链已修复，
+> 过程与验收见 `specs/001-scores-overview-route/`。下方原文保留，用于记录当时的偏差。
 
 > ⚠️ **该页未在 `router/index.js` 注册**，源文件仍在 `src/views/`。且 `Home.vue:215` 有一个
 > `<router-link to="/scores-overview">机会速览</router-link>` 指向它 —— **这是个死链**（点击落到空白/兜底），
@@ -246,6 +247,9 @@ TraderAnalysisFrontend/
 **筛选标签（5 个）：** 全部 / **严重超卖且站上MA5** / 严重超卖 / 超卖 / 中性
 （对应 `all` / `actionable` / `strong_buy` / `buy` / `no_action`，各自带计数）
 > ⚠️ 本节此前把第 2 个标签写成「可执行」，实际文案是 **「严重超卖且站上MA5」**（`ScoresOverview.vue:20`），
+>
+> ✅ **勘误（2026-11-01）**：该分组已改名为 **「超卖且站上MA5」** —— 其成员评分为 60~79，属「超卖」而非「严重超卖」(≥80)，
+> 原标题口径有误。同时该分组已从「超卖」中剔除，四个分档互斥，不再重复渲染。见 `specs/001-scores-overview-route/`。
 > 与下方第 1 个区块的标题一致；已更正（2026-10-12）。
 
 **页面结构（4 个区块，随筛选标签显隐）：**
@@ -475,9 +479,10 @@ TraderAnalysisFrontend/
 | 内容生成 | `listContentTemplates()` | `GET /api/content-templates` | Review |
 | 内容生成 | `saveContentTemplate(key, payload)` | `PUT /api/content-templates/{key}` | Review |
 | 内容生成 | `deleteContentTemplate(key)` | `DELETE /api/content-templates/{key}` | Review |
-| 持仓（OpenD） | `getPosition(env, currency?)` | `GET /api/position` | Position |
-| 目标仓位（OpenD） | `getAllocation(env)` | `GET /api/allocation` | Allocation |
-| 目标仓位（OpenD） | `saveAllocationConfig(payload)` | `PUT /api/allocation` | Allocation |
+
+> ✅ **变更（2026-11-02）**：`getPosition` / `getAllocation` / `saveAllocationConfig` 已随「持仓配置」功能下线删除；
+> 后端 `GET /api/position`、`GET|PUT /api/allocation` **保留**，仍可被脚本直接调用。
+> 见 `specs/002-retire-position-allocation/`。
 
 > ⚠️ **勘误（2026-10-12）**：本文档此前列出 `getFundamentalLatest` / `getFundamentalOverview` / `stockFilterSearch` / `stockFilterInfo` / `getGridStatus` / `getGridOrders`，**`src/api/trader.js` 中均不存在**，已删除。
 > 连带处理：唯一引用前两者的 `views/Fundamental.vue` 是悬空引用（其依赖的后端端点也不存在）→ **该文件已于 2026-10-12 删除**，详见 §6.7。

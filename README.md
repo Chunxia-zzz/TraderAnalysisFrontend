@@ -40,7 +40,8 @@ npm run preview  # 本地预览生产构建
 ```
 
 > **构建时那条 `chunks are larger than 500 kB` 警告可以忽略** —— 它是 Vite 的默认建议阈值，
-> 不是错误，不影响功能与正确性。主包较大（1531 KB）的根因是 `src/main.js` 全量注册了
+> 不是错误，不影响功能与正确性。主包较大（**1568 KB**，2026-11-01 实测 `npm run build`；
+> 此前记为 1531 KB，属旧测量值）的根因是 `src/main.js` 全量注册了
 > ant-design-vue（`app.use(Antd)`），tree-shaking 失效；真正解法是改按需导入，但收益与回归风险
 > 不成比例，**暂不处理**。
 >
@@ -54,25 +55,27 @@ npm run preview  # 本地预览生产构建
 | 首页 | `/` | 价值投资理念展示（六段式落地页 + 暗/浅主题切换，**纯静态，不走任何后端接口**） |
 | 市场温度 | `/market-temperature` | 顶部三视图切换（**美股大盘 / 黄金 / 比特币**）：3 维度综合评分、8 级状态映射、仓位建议、SPY/QQQ 指标、历史趋势图；黄金与比特币视图走资产温度（价格/日RSI6/周RSI6/MA200偏离/ATH回撤/52周位置 6 项指标）。**口径（2026-10-19 反转）：分数越高 = 越恐慌 = 越值得加仓**（与个股评分同向；高分蓝=机会，低分红=贪婪） |
 | 交易信号 | `/momentum-leaders` | 空转多/多转空（EMA5/30交叉）+ 主升浪龙头 + 主跌浪超卖 + 低估做多 |
+| 机会速览 | `/scores-overview` | 按评分**分档**看「跌得多深」：严重超卖(≥80) / 超卖(60~79) / 中性(<60) + 「超卖且站上MA5」可执行分组（从超卖里单列，不与超卖重复）+ 就地展开止盈损（止损/止盈/风险回报比）。**分档为互斥分区**，四段之和等于总数，见 `specs/001-scores-overview-route/` |
 | 利弗莫尔 | `/livermore` | **独立信号体系**：关键点突破/逼近/已在关键点上方/风险四分组，口径说明卡 + 统计条 + 抽屉详情（关键点全景/金字塔加仓位/潮汐与相对强度） |
 | 个股分析 | `/dashboard` | 道氏三层趋势 + 基本面估值（分析师+晨星）+ 关键位置盈亏比 + 形态置信度 + 综合评分 |
 | 信号回测 | `/backtest` | **5 种策略模式**回测（趋势跟踪/买入并持有/波段操作/EMA飘带多头/EMA飘带空头），统计+交易明细 |
 | 个股历史K线 | `/chart` | 蜡烛图 + MA/布林带/EMA多空带/成交量/MACD/RSI 多窗格联动 + **支撑压力位标注**（Swing Pivot 聚类）+ **利弗莫尔关键点叠加**（关键点/箱体下沿/止损，仅日线），支持 4H/日K/周K |
 | 标的管理 | `/watchlist-manage` | 标的池增删改查 + 筛选 + 晨星折价排序 + 刷新快照 |
 | 市场复盘 | `/review` | 日/周复盘报告 + 自媒体文案生成 |
-| 我的持仓 | `/position` | 实时持仓查询（依赖本机 OpenD） |
-| 目标仓位 | `/allocation` | 永久组合目标 vs 实际对比 + **五级**加仓建议（强烈买入/建议加仓/有差距等回调/已达标或超配/偏贵等回调，依赖本机 OpenD） |
 
 ## 导航结构
 
 ```
-市场温度 | 交易信号 | 利弗莫尔 | 个股分析 ▾ | 信号回测 | 持仓配置 ▾ | 市场复盘 (beta) | 标的管理
-                              ├─ 个股技术分析 (/dashboard)   ├─ 我的持仓 (/position)
-                              └─ 个股历史K线 (/chart)        └─ 目标仓位 (/allocation)
+市场温度 | 交易信号 | 利弗莫尔 | 个股分析 ▾ | 信号回测 | 市场复盘 (beta) | 标的管理
+                              ├─ 个股技术分析 (/dashboard)
+                              └─ 个股历史K线 (/chart)
 ```
 
-> 「交易信号」是**平级链接**（指向 `/momentum-leaders`），不是下拉菜单；真正带 ▾ 的只有「个股分析」与「持仓配置」两个下拉。
+> 「交易信号」是**平级链接**（指向 `/momentum-leaders`），不是下拉菜单；真正带 ▾ 的只有「个股分析」一个下拉。
 > 「市场复盘」菜单项右侧带 `beta` 徽标。
+>
+> ✅ **变更（2026-11-02）**：「持仓配置」下拉（我的持仓 `/position` / 目标仓位 `/allocation`）已下线，
+> 两个旧地址保留重定向到首页（避免书签打开白屏）。见 `specs/002-retire-position-allocation/`。
 
 ## 认证
 
@@ -111,9 +114,9 @@ npm run preview  # 本地预览生产构建
 | `GET /api/tp-sl` | 止盈止损位计算 | ScoresOverview |
 | `GET /api/livermore/signals` | 利弗莫尔关键点信号（独立体系，四分组） | **Livermore** |
 | `GET /api/livermore/detail` | 利弗莫尔关键点全景 + 可画线 `levels` | Livermore（抽屉）/ **Chart（K 线叠加）** |
-| `GET /api/position` | 实时持仓（**依赖本机 OpenD**） | Position |
-| `GET /api/allocation` | 永久组合目标与偏离 + 加仓建议（**依赖本机 OpenD**） | Allocation |
-| `PUT /api/allocation` | 保存目标仓位配置 | Allocation |
+| `GET /api/position` | 实时持仓（**依赖本机 OpenD**） | ⚠️ 当前无页面引用（2026-11-02 下线） |
+| `GET /api/allocation` | 永久组合目标与偏离 + 加仓建议（**依赖本机 OpenD**） | ⚠️ 当前无页面引用（日更仍直接调用） |
+| `PUT /api/allocation` | 保存目标仓位配置 | ⚠️ 当前无页面引用（改为直接调接口或改 JSON） |
 | `GET /api/backtest/run` | 信号回测（5 种模式） | Backtest |
 | `GET /api/review` | 日/周复盘报告 | Review |
 | `GET /api/content-generator` | 自媒体文案生成 | Review |
@@ -159,10 +162,8 @@ src/                          # 共 19 个文件
 │   ├── Backtest.vue           # ★ 信号回测
 │   ├── WatchlistManage.vue    # ★ 标的池管理
 │   ├── Review.vue             # ★ 市场复盘 + 文案生成
-│   ├── Position.vue           # ★ 我的持仓（依赖 OpenD）
-│   ├── Allocation.vue         # ★ 目标仓位（依赖 OpenD）
-│   └── ScoresOverview.vue     # 机会速览（未挂载）
-├── router/index.js            # 路由配置（11 条已注册）
+│   └── ScoresOverview.vue     # ★ 机会速览（按评分分档 + 止盈损）
+├── router/index.js            # 路由配置（12 条：10 个页面 + 2 条下线重定向）
 ├── App.vue                    # 根组件（导航 + 健康检查）
 └── main.js                    # 入口文件
 ```
@@ -173,19 +174,32 @@ src/                          # 共 19 个文件
 >
 > ⚠️ `ScoresOverview.vue` 未挂载路由，但 `Home.vue` 里有一个 `<router-link to="/scores-overview">机会速览</router-link>`
 > 指向它 → **这是个死链**（点击落到空白）。属已知待处理问题。
+>
+> ✅ **勘误（2026-11-01）**：该路由已注册（`/scores-overview`），死链已修复。
+> 落地过程与验收记录见 `specs/001-scores-overview-route/`。原文保留以记录当时的偏差。
 
 ## 文档索引
 
 | 文件 | 性质 |
 |---|---|
+| `AGENTS.md` | **agent 操作层**：命令、路径、环境坑、目录地图；原则层在 `.specify/memory/constitution.md` |
+| `specs/` | **事前意图**：每个 feature 的 spec / plan / tasks，约定见 `specs/README.md` |
 | `README.md`（本文件） | 现状说明，**与代码一致** |
 | `docs/architecture.md` | 现状技术方案，**与代码一致**，页面细节以它为准 |
 | `docs/design-spec-v1-clean-financial.md` | **v1 视觉改造设计稿（2026-06-18）**。色板/字体/Ant token/全局 CSS 已落地且逐值一致；但 §2、§3 的逐页布局描述**已与现状脱节**（Home、Dashboard 改动最大，Grid Trading 页已删除）。开头 §0 有现状对照表，**不要拿它当现状依据** |
 
 ## 端到端验收（零依赖 CDP）
 
-`scripts/` 下是自包含的浏览器验收脚本，用本机 Chrome + Node 内置 WebSocket 驱动，
-不装任何 npm 依赖。**前置：前端 5173 与后端 8000 都已在运行**。
+`scripts/` 下是**完全自包含**的浏览器验收脚本：CDP 驱动在 `scripts/lib/cdp.mjs`（本仓库自有，162 行），
+用本机 Chrome + Node 内置 WebSocket，**不装任何 npm 依赖、不引用仓库外的任何文件**。
+**前置：前端 5173 与后端 8000 都已在运行**。
+
+> **2026-11-02 修正**：此脚本原先从 WorkBuddy 的 `cdp-ui-smoke` 技能按**绝对路径**导入 CDP 驱动，
+> 该技能被系统清理后 4 个脚本全部 `ERR_MODULE_NOT_FOUND` —— 回归测试凭空依赖了仓库外的东西。
+> 已把驱动内联为 `scripts/lib/cdp.mjs`，并把硬编码的 Chrome 路径/端口改为环境变量（见下）。
+>
+> 可用环境变量：`TA_UI_BASE`（默认 `http://127.0.0.1:5173`）、`CHROME_PATH`、`CDP_PORT`（默认 9333）。
+> 端口被其他项目占用时：`BACKEND_PORT=8001 npm run dev` + `TA_UI_BASE=http://127.0.0.1:5174 node scripts/smoke-ktype.mjs`。
 
 ```bash
 node scripts/smoke-keylevels.mjs   # K 线支撑压力位标注（14 项）

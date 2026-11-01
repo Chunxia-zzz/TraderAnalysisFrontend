@@ -21,15 +21,7 @@
               </template>
             </a-dropdown>
             <router-link to="/backtest" class="nav-item">信号回测</router-link>
-            <a-dropdown>
-              <span class="nav-item nav-dropdown" :class="{ active: isPositionRoute }">持仓配置 ▾</span>
-              <template #overlay>
-                <a-menu @click="handleMenuClick">
-                  <a-menu-item key="/position">我的持仓</a-menu-item>
-                  <a-menu-item key="/allocation">目标仓位</a-menu-item>
-                </a-menu>
-              </template>
-            </a-dropdown>
+            <!-- 「持仓配置」下拉已于 2026-11-02 下线，见 specs/002-retire-position-allocation/ -->
             <router-link to="/review" class="nav-item">市场复盘 <span class="beta-tag">beta</span></router-link>
             <router-link to="/watchlist-manage" class="nav-item">标的管理</router-link>
             <span class="health-dot" :class="healthOk ? 'online' : 'offline'" :title="healthOk ? '后端在线' : '后端离线'" />
@@ -56,9 +48,6 @@ const healthOk = ref(false)
 
 const stockRoutes = ['/dashboard', '/chart']
 const isStockRoute = computed(() => stockRoutes.includes(route.path))
-
-const positionRoutes = ['/position', '/allocation']
-const isPositionRoute = computed(() => positionRoutes.includes(route.path))
 
 function handleMenuClick({ key }) {
   router.push(key)

@@ -14,19 +14,19 @@
       </div>
       <div class="filter-tabs" v-if="overview">
         <span class="filter-tab" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">
-          全部 <em>{{ overview.total_count }}</em>
+          全部 <em>{{ overview.counts.all }}</em>
         </span>
         <span class="filter-tab blue" :class="{ active: activeFilter === 'actionable' }" @click="activeFilter = 'actionable'">
-          严重超卖且站上MA5 <em>{{ overview.summary.actionable_count }}</em>
+          超卖且站上MA5 <em>{{ overview.counts.actionable }}</em>
         </span>
         <span class="filter-tab green" :class="{ active: activeFilter === 'strong_buy' }" @click="activeFilter = 'strong_buy'">
-          严重超卖 <em>{{ overview.summary.strong_buy_count }}</em>
+          严重超卖 <em>{{ overview.counts.strong_buy }}</em>
         </span>
         <span class="filter-tab gold" :class="{ active: activeFilter === 'buy' }" @click="activeFilter = 'buy'">
-          超卖 <em>{{ overview.summary.buy_count }}</em>
+          超卖 <em>{{ overview.counts.buy }}</em>
         </span>
         <span class="filter-tab" :class="{ active: activeFilter === 'no_action' }" @click="activeFilter = 'no_action'">
-          中性 <em>{{ overview.summary.no_action_count }}</em>
+          中性 <em>{{ overview.counts.no_action }}</em>
         </span>
       </div>
     </div>
@@ -36,8 +36,8 @@
         <!-- 可执行机会 -->
         <div v-if="overview.actionable && overview.actionable.length > 0 && (activeFilter === 'all' || activeFilter === 'actionable')" class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">严重超卖且站上MA5</span>
-            <span class="section-badge">评分达标 + 站上MA5</span>
+            <span class="section-title">超卖且站上MA5</span>
+            <span class="section-badge">超卖区间 + 站上MA5</span>
           </div>
           <div class="stock-table">
             <div
@@ -56,7 +56,7 @@
                   {{ ribbonLabel(item.ema_ribbon) }}
                 </span>
               </div>
-              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ scoreText(item.total_score) }}</span>
             </div>
           </div>
         </div>
@@ -85,7 +85,7 @@
                 </span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px">
-                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ scoreText(item.total_score) }}</span>
                 <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
               </div>
             </div>
@@ -126,7 +126,7 @@
                 </span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px">
-                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+                <span :class="scorePillClass(item.total_score)" class="score-pill">{{ scoreText(item.total_score) }}</span>
                 <span class="tpsl-btn" @click="toggleTpSl(item, $event)">{{ expandedCode === item.code ? '收起' : '止盈损' }}</span>
               </div>
             </div>
@@ -164,7 +164,7 @@
                   {{ ribbonLabel(item.ema_ribbon) }}
                 </span>
               </div>
-              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ item.total_score.toFixed(1) }}</span>
+              <span :class="scorePillClass(item.total_score)" class="score-pill">{{ scoreText(item.total_score) }}</span>
             </div>
           </div>
         </div>
@@ -192,6 +192,61 @@ const expandedCode = ref(null)
 const tpslLoading = ref(false)
 const tpslData = reactive({})
 
+// 后端允许数值字段为 null（见后端 api.md「通用约定」），
+// 直接 .toFixed() 会让整页渲染失败，故统一走这里。
+function scoreText(score) {
+  return typeof score === 'number' && Number.isFinite(score) ? score.toFixed(1) : '--'
+}
+
+const EMPTY_SUMMARY = {
+  actionable_count: 0,
+  strong_buy_count: 0,
+  buy_count: 0,
+  no_action_count: 0,
+}
+
+/**
+ * 归一化评分总览响应：只补齐结构，不改数值。
+ *
+ * 后端现状有两种形状，靠有无顶层 `date` 区分：
+ *   有数据 → payload 直接在顶层（无 data 包装）
+ *   无数据 → { data: null, message }
+ * 同时兼容将来可能统一成 { data: {...} } 的写法，避免换契约时整页崩。
+ */
+function normalizeOverview(body) {
+  const payload = body && body.date !== undefined ? body : (body && body.data) || null
+  if (!payload) return null
+  const actionable = Array.isArray(payload.actionable) ? payload.actionable : []
+  const strong_buy = Array.isArray(payload.strong_buy) ? payload.strong_buy : []
+  const buyRaw = Array.isArray(payload.buy) ? payload.buy : []
+  const no_action = Array.isArray(payload.no_action) ? payload.no_action : []
+
+  // actionable 是 buy 的子集（后端同时返回两处），若都渲染，「全部」视图会重复展示同一标的，
+  // 按钮条数（total_count）也会与实际行数对不上。这里从 buy 中剔除，形成互斥分区。
+  const actionableCodes = new Set(actionable.map((i) => i.code))
+  const buy = buyRaw.filter((i) => !actionableCodes.has(i.code))
+
+  // 按钮条数一律由实际渲染的数组推导 —— 保证「按钮说几条，就渲染几行」，
+  // 不依赖后端的 summary / total_count，后端口径漂移也不会让两者失配。
+  const counts = {
+    all: actionable.length + strong_buy.length + buy.length + no_action.length,
+    actionable: actionable.length,
+    strong_buy: strong_buy.length,
+    buy: buy.length,
+    no_action: no_action.length,
+  }
+
+  return {
+    ...payload,
+    summary: { ...EMPTY_SUMMARY, ...(payload.summary || {}) },
+    actionable,
+    strong_buy,
+    buy,
+    no_action,
+    counts,
+  }
+}
+
 function scorePillClass(score) {
   if (score >= 80) return 'score-pill high'
   if (score >= 60) return 'score-pill mid'
@@ -215,7 +270,15 @@ async function toggleTpSl(item, event) {
   tpslLoading.value = true
   try {
     const { data } = await getTpSl(code)
-    tpslData[code] = (data && data.data !== null) ? data : { error: data?.message || '暂无数据' }
+    // 后端现状：/api/tp-sl 返回扁平对象（无 data 包装）；无数据时返回 { data: null, message }
+    const payload = data && data.stop_loss ? data : (data && data.data) || null
+    // 三个字段缺任一都会让模板里的 .toFixed() 抛错，整页渲染失败 —— 统一按「不可用」处理
+    const usable =
+      payload &&
+      payload.stop_loss?.price != null &&
+      payload.take_profit?.price != null &&
+      payload.risk_reward_ratio != null
+    tpslData[code] = usable ? payload : { error: data?.message || '该标的止盈损数据不可用' }
   } catch {
     tpslData[code] = { error: '请求失败' }
   } finally {
@@ -230,11 +293,16 @@ async function loadData() {
   try {
     const dateStr = selectedDate.value ? selectedDate.value.format('YYYY-MM-DD') : undefined
     const res = await getScoresOverview(dateStr)
-    const d = res.data
-    if (d && d.data === null) {
-      emptyMessage.value = d.message || '暂无评分数据'
+    const body = res.data
+    if (!body || body.data === null) {
+      emptyMessage.value = body?.message || '暂无评分数据'
+      return
+    }
+    const normalized = normalizeOverview(body)
+    if (normalized) {
+      overview.value = normalized
     } else {
-      overview.value = d
+      emptyMessage.value = body.message || '暂无评分数据'
     }
   } catch {
     emptyMessage.value = '获取数据失败'
