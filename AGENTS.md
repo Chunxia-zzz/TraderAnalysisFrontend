@@ -154,12 +154,17 @@ specify extension add bug          # 重建缺陷三件套命令（assess / fix 
 
 ## 8. 环境坑
 
-1. **验收脚本前置**：前端 5173 **与**后端 8000 都在运行。只起前端会全部超时。
-2. **验收用本机 Chrome**驱动（CDP + Node 内置 WebSocket），**不装任何 npm 依赖**。
-3. 截图输出到 `F:/TraderAnalysis/logs/`（后端仓库目录），不是本仓库。
-4. **canvas 上看不到的东西要用指纹证明**：`smoke-livermore.mjs` 用 `toDataURL()` 抽稀采样比哈希，
+1. **GitHub SSH 22 端口会间歇性被重置**（`Connection reset by 20.205.243.166 port 22`）。
+   此时改用 443：`git push ssh://git@ssh.github.com:443/Chunxia-zzz/TraderAnalysisFrontend.git main`。
+   注意 `ssh.github.com` 的主机密钥要先加进 `~/.ssh/known_hosts`（指纹与 github.com 相同，
+   GitHub 官方公布值可作为校验依据）。要一劳永逸，可在 `~/.ssh/config` 里给 `github.com`
+   配 `HostName ssh.github.com` + `Port 443`。
+2. **验收脚本前置**：前端 5173 **与**后端 8000 都在运行。只起前端会全部超时。
+3. **验收用本机 Chrome**驱动（CDP + Node 内置 WebSocket），**不装任何 npm 依赖**。
+4. 截图输出到 `F:/TraderAnalysis/logs/`（后端仓库目录），不是本仓库。
+5. **canvas 上看不到的东西要用指纹证明**：`smoke-livermore.mjs` 用 `toDataURL()` 抽稀采样比哈希，
    证明线确实画上去了；只看 DOM 会误判成功。
-5. **改主题变量必跑对比度断言**：前景色 == 背景色导致文字隐形，这个坑真踩过。
+6. **改主题变量必跑对比度断言**：前景色 == 背景色导致文字隐形，这个坑真踩过。
 
 ## 9. 常用命令
 

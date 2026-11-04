@@ -82,6 +82,29 @@
 **为什么这不是新 spec**：只是 004 内部的步骤合并与密钥来源调整，不改变「何时部署、部署什么、失败怎么办」
 三条契约（FR-001/003/006 均未变），属收敛项而非新需求。
 
+### 收敛实测（run [41844988717](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/runs/41844988717)，提交 `bf98ac8`）
+
+| 指标 | 收敛前 | 收敛后 |
+|---|---|---|
+| deploy job 耗时 | 22s | **18s** |
+| 其中 Prepare SSH | 6s（含 ssh-keyscan + 探活连接） | **0s** |
+| 其中上传+切换 | 5s + 3s（两条连接） | **4s（一条连接）** |
+| 每次部署的 SSH 登录记录 | 3 条 | **1 条**（`22:11:36 from 134.33.102.114`，该 IP 命中 GitHub Actions 网段） |
+| 主机密钥校验 | 运行时 `ssh-keyscan`（信任首次所见） | 仓库固化 + `StrictHostKeyChecking=yes` |
+
+线上结果：`index-BGAl7ZYY.js`、`index.html` mtime `22:11:34`、`.prev` 保留旧版、切换标记无残留。
+
+### 收敛过程中的一次真实失败（留档，避免重犯）
+
+`f605228` 那次 deploy **失败**：`Prepare SSH key` 步骤 0s 报错。
+根因是 **deploy job 里没有 `actions/checkout`**（它只需要 artifact），
+所以 `.github/deploy_known_hosts` 不在工作区，`cp` 直接失败。
+
+- **本地模拟没能复现**，因为本地目录天然有仓库 → 这是「模拟环境比真实环境rich」的典型陷阱
+- 修复：加 `checkout` + **sparse-checkout 只取该文件**（1s），并在 Prepare 里加存在性断言，
+  下次漏 checkout 会打印明确错误而不是一句 `cp: cannot stat`
+- 教训：**凡是「从仓库读文件」的步骤，必须先确认该 job 有没有 checkout**
+
 ## 验证记录（2026-11-04 实测）
 
 ### 远端全链路（run [41840934969](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/runs/41840934969)，提交 `5b89c5b`）
