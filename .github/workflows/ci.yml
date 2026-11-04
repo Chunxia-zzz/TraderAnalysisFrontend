@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']   # 纯文档改动不跑（specs/** 的 .md 同样跳过）
+  pull_request:
+    paths-ignore: ['docs/**', '**/*.md']
+
+# 串行化同一分支的 run，避免旧提交的结果覆盖新提交
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# 显式声明最小权限：check job 只读代码 + 上传产物；security job 需要只读内容
+permissions:
+  contents: read
+
+jobs:
+  # ── L1+L2 检查流水线：锁文件安装 → ESLint → 单测 → 生产构建 ────────────────
+  # 门槛与本地 `bash scripts/check.sh` **字面同源**：CI 不另写命令，直接执行同一份脚本。
+  # 这是为了排除「本地两套、CI 一套」导致的假绿/假红。
+  #
+  # 不做 OS 矩阵：纯 JS 无平台分支代码（无路径分隔符断言、无权限位、无平台二进制名），
+  # Windows 侧由开发者本地跑同一个 check.sh 覆盖。后端做矩阵是因为有 kill_unix/kill_windows 分支。
+  check:
+    name: check (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Run check (npm ci + eslint + vitest + vite build)
+        # --fresh 强制走 npm ci：CI runner 上没有 node_modules，本来也会走，
+        # 但显式传参让「这一步在做什么」不依赖对脚本内部逻辑的猜测。
+        run: bash scripts/check.sh --fresh
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          retention-days: 7
+          if-no-files-found: error   # 构建成功却没有产物 = 门禁有问题，必须暴露
+
+  # ── L2 安全扫描：全历史密钥扫描（独立 job，不阻塞上游）─────────────────────
+  # 独立成 job 的意义：密钥泄露与「代码写得好不好」无关，不能被前者掩盖。
+  security:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # 全历史扫描，只扫本次 diff 会漏掉历史泄露
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
