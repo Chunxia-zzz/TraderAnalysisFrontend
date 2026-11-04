@@ -7,7 +7,7 @@
 >
 > 现状说明（功能页、API 表、页面细节）在 `README.md` 与 `docs/architecture.md`，本文件不重复。
 >
-> 最后更新：2026-11-01
+> 最后更新：2026-11-04
 
 ---
 
@@ -53,14 +53,18 @@
 |---|---|
 | `src/api/trader.js` | 所有后端调用（33 个导出函数），**API 层唯一入口** |
 | `src/components/IndicatorChart.vue` | **唯一**的 K 线图表组件（多窗格用 `priceScaleId`，非多实例） |
-| `src/views/` | 12 个页面，其中 **11 条已注册路由**，`ScoresOverview.vue` **未挂载** |
-| `src/router/index.js` | 路由配置（**无 meta、无守卫**） |
+| `src/views/` | 10 个页面，**全部已注册路由**（含 `/scores-overview`） |
+| `src/router/index.js` | 路由配置（12 条：10 个页面 + 2 条下线重定向，**无 meta、无守卫**） |
 | `src/styles/theme.js` / `tokens.css` | ant token / CSS 变量 |
+| `scripts/check.sh` | **本地预检**：`npm ci` → lint → 单测 → 构建。**CI 执行的就是这个文件**，不是另抄一份 |
+| `scripts/smoke-*.mjs` | 零依赖 CDP 验收脚本（需本机 Chrome + 前后端在跑，**不在 CI 里**） |
+| `eslint.config.js` / `vitest.config.js` | 规范与单测配置。ESLint 强度刻意取 `essential`，见 §5.9 |
+| `tests/unit/` | 纯离线单测：API 层请求构造 / 路由表与页面文件 / README 与 API 表一致 |
+| `.github/workflows/ci.yml` | GitHub Actions：`check`（跑 `check.sh`）+ `security`（gitleaks 全历史）；**无部署 job** |
 | `docs/architecture.md` | **现状技术方案**，页面细节以它为准 |
 | `docs/design-spec-v1-clean-financial.md` | v1 视觉设计稿。**§2/§3 逐页布局已脱节，不要当现状依据** |
 | `.specify/` | SDD 配置：`memory/constitution.md`（原则层）/ `templates/` / `scripts/` |
 | `specs/` | 事前意图：每个 feature 一个 `NNN-<ascii-slug>/`，见 `specs/README.md` |
-| `scripts/` | 零依赖 CDP 验收脚本（`smoke-*.mjs` / `diag-canvas.mjs`） |
 
 ## 4. clone 后第一件事
 
@@ -89,6 +93,12 @@ specify extension add bug          # 重建缺陷三件套命令（assess / fix 
 7. **非平凡变更先写 spec**：新增页面 / 改 API 函数签名 / 改图表能力 / 改口径配色 / 引入依赖
    → 先落 `specs/NNN-<ascii-slug>/spec.md`。豁免清单见 `specs/README.md`。
 8. **提交前缀**：`feat:` / `fix:` / `docs:` / `chore:` / `refactor:`。
+9. **push 前跑 `bash scripts/check.sh`**（= `npm run check`）：`npm ci` → lint → 单测 → 构建。
+   **CI 执行的就是同一份脚本**，所以"本地通过 CI 失败"只会是环境差异，别去怀疑配置不一致。
+   `npm run check` 需要 bash（Windows 用 Git Bash）。
+10. **不要为了过 lint 去改强度**：ESLint 只开 `eslint-plugin-vue` 的 `essential`（挡真 bug 的规则）。
+    想加风格规则（`recommended`）等于要求重排 6500+ 行存量代码 —— 那是**独立需求，要单独提 spec**，
+    不是顺手改一行配置。
 
 ## 6. 已知技术债（不要当 bug 修）
 
@@ -96,8 +106,12 @@ specify extension add bug          # 重建缺陷三件套命令（assess / fix 
 |---|---|
 | `dayjs` 被 `Dashboard.vue` 直接 import，但不在 `package.json`（靠 ant-design-vue 传递安装） | 建议补进 `dependencies`，但**改动会动 `package-lock.json`**，改前先确认 |
 | 主包 1531 KB，全量注册 antd | 接受现状，已用 Nginx gzip 压到 480 KB |
-| `ScoresOverview.vue` 未挂载路由，`Home.vue` 里 `/scores-overview` 是**死链** | 已知，未处理 |
 | `src/api/trader.js` 有 5 个函数无页面引用，5 个后端端点无函数封装 | 见 `README.md`「后端 API」节，改动时须知 |
+
+> ⚠️ 勘误（2026-11-04）：上表原有两行「`ScoresOverview.vue` 未挂载路由 / `Home.vue` 里 `/scores-overview` 是死链」
+> 已与代码不符 —— 该路由在 2026-11-01 就已注册（`specs/001-scores-overview-route/`），页面可正常访问。
+> 行已删除，原文保留在本行以记录当时的偏差。`tests/unit/router.spec.js` 现在会持续校验
+> 「每个页面都有路由、每条路由的文件都存在」，这类偏差不会再靠人看。
 
 ## 7. 技能索引
 
@@ -145,6 +159,13 @@ npm run dev        # 5173，需后端 8000
 npm run build      # 输出 dist/
 npm run preview    # 本地预览生产构建
 
+# ── 质量门（push 前必跑）──
+npm run check              # = bash scripts/check.sh：npm ci → lint → 单测 → 构建
+npm run lint               # 只查规范（ESLint，全库 0 违例）
+npm run test:unit          # 只跑单测（纯离线，不需要后端/浏览器）
+bash scripts/check.sh --fresh   # 强制 npm ci 从零装，验证锁文件（CI 每次都这么跑）
+
+# ── 需真实浏览器的验收（不在 CI 里）──
 node scripts/smoke-livermore.mjs   # 利弗莫尔模块（98 项）
 node scripts/smoke-keylevels.mjs   # K 线支撑压力位（14 项）
 node scripts/smoke-ktype.mjs       # 1d/4h/1w 周期切换（12 项）

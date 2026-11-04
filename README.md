@@ -1,5 +1,7 @@
 # TraderAnalysis Frontend
 
+[![ci](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/workflows/ci.yml)
+
 股票分析前端，基于 Vue 3，对接后端 FastAPI 服务。提供市场温度、交易信号（空转多/多转空/主升浪龙头/主跌浪超卖/低估做多）、道氏趋势个股分析、基本面估值、利弗莫尔关键点、信号回测、标的管理等功能。
 
 > **两套并行的信号体系**（前端也刻意分成两块展示）：① **6 因子评分**（纯均值回归，买超卖）；
@@ -12,7 +14,7 @@
 
 ### 前提条件
 
-- **Node.js** >= 18（推荐 20+），附带 npm
+- **Node.js** >= 20.19（`npm run lint` 用的 ESLint 10 要求这个下限；CI 固定 Node 22。只跑 `dev`/`build` 时 18 也能用，但会偏离 CI 版本）
 - **后端服务**运行在 `http://localhost:8000`（FastAPI，接口文档：http://localhost:8000/docs）
   - 后端端口冲突时：先 `BACKEND_PORT=8001` 起后端，再 `BACKEND_PORT=8001` 启动前端（vite proxy 会代理到对应端口，见 `vite.config.js`）
 
@@ -47,6 +49,47 @@ npm run preview  # 本地预览生产构建
 >
 > 线上已通过 **Nginx gzip** 把传输量降到 480 KB（整页首屏 1688 KB → 575 KB，省 66%）——
 > 这是服务器配置，与产物大小无关。配置与坑见 `docs/architecture.md` §9.3。
+
+## 质量门与 CI
+
+**push 前跑一条命令：**
+
+```bash
+npm run check          # = bash scripts/check.sh
+```
+
+它依次做四件事，任一步失败立即停（退出码非 0）：
+
+| 顺序 | 步骤 | 命令 | 抓什么 |
+|---|---|---|---|
+| 1 | 依赖安装 | `npm ci` | 锁文件与 `package.json` 不同步（新增依赖忘了提交 lock） |
+| 2 | 代码规范 | `npm run lint` | ESLint 能判定的真问题：未定义变量、未使用变量、模板语法错误 |
+| 3 | 单元测试 | `npm run test:unit` | API 层请求构造、路由表与页面文件一致、README 与 API 表一致 |
+| 4 | 生产构建 | `npm run build` | 打包失败、无法产出 `dist/` |
+
+**CI 与本地是同一个文件。** `.github/workflows/ci.yml` 的 `check` job 不另写命令，直接执行
+`bash scripts/check.sh --fresh`。所以「本地绿、CI 红」只可能来自环境差异（Node 版本、依赖下载），
+不会来自「两份配置写得不一样」。
+
+各步骤单独跑：
+
+```bash
+npm run lint           # 只查规范
+npm run test:unit      # 只跑单测（纯离线，不需要后端与浏览器）
+bash scripts/check.sh --fresh   # 强制 npm ci 从零安装，验证锁文件（CI 每次都这么跑）
+```
+
+**这条流水线刻意不做的事**（都是权衡结果，不是遗漏，改之前请先读 `specs/003-frontend-ci-pipeline/`）：
+
+- **不做覆盖率门禁**：覆盖率主体是组件渲染，而单测只覆盖 api/路由/文档一致性这层薄逻辑。
+  在个位数覆盖率上设阈值是假门禁。
+- **不做部署（CD）**：线上仍由 `git push` 到服务器 bare repo + hook 部署。CI 不含任何上线动作。
+- **不跑 `scripts/smoke-*.mjs`**：它们需要本机 Chrome + 前端 5173 + 后端 8000，在 CI 里必超时。
+  它们仍是**本地**验收手段（见文末「端到端验收」）。
+- **不加 Prettier**：ESLint 只开了 `essential`（挡真 bug 的规则），纯风格规则会要求重排 6500+ 行存量代码，
+  收益与噪音不成比例。
+
+> CI 成功后可在运行页面下载当次的 `dist` 产物（保留 7 天），用于核对线上跑的是哪一版。
 
 ## 功能页面
 
@@ -96,7 +139,9 @@ npm run preview  # 本地预览生产构建
 
 ## 后端 API
 
-下表逐条对应 `src/api/trader.js` 的 33 个导出函数（**已核对无遗漏、无虚构**）。
+下表逐条对应 `src/api/trader.js` 的 **30 个导出函数 / 30 个前端端点**（同一路径多方法分开计），
+另列 3 个「后端保留、前端已不再封装」的端点。**已核对无遗漏、无虚构**——`tests/unit/docs-api-sync.spec.js`
+每次 CI 都会重新核对一遍，不一致就红。
 
 | 接口 | 说明 | 页面 |
 |------|------|------|
@@ -124,12 +169,17 @@ npm run preview  # 本地预览生产构建
 | `PUT /api/content-templates/{key}` | 保存文案模板 | Review |
 | `DELETE /api/content-templates/{key}` | 删除文案模板 | Review |
 | `GET /api/watchlist` | 标的池（含晨星折价、最新收盘价、分类标签） | Chart / Dashboard / Backtest / WatchlistManage |
+| `GET /api/watchlist/{code}` | 单个标的全量详情 | ⚠️ 当前无页面引用 |
 | `POST /api/watchlist` | 新增标的（内部调 Futu 补全快照，**需 OpenD**） | WatchlistManage |
+| `POST /api/watchlist/batch` | 批量新增标的 | ⚠️ 当前无页面引用 |
 | `PATCH /api/watchlist/{code}` | 编辑标的（仅白名单字段） | WatchlistManage |
 | `DELETE /api/watchlist/{code}` | 删除标的 | WatchlistManage |
 | `POST /api/watchlist/refresh-snapshot` | 批量刷新快照（**需 OpenD**） | WatchlistManage |
+| `GET /api/indicators/latest` | 最新一根指标（不返回 K 线序列） | ⚠️ 当前无页面引用 |
+| `GET /api/trade-signals` | 顶/底背离交易信号 | ⚠️ 当前无页面引用 |
+| `GET /api/bottom-signals` | 超卖底部信号（近 N 天） | ⚠️ 当前无页面引用 |
 
-**定义了但当前无页面引用的 API 函数**（保留备用，改动时须知）：
+**已在上表标注「⚠️ 当前无页面引用」的 5 个函数**（按函数名索引，便于搜代码）：
 `getIndicatorsLatest`、`getWatchlistDetail`、`batchAddWatchlist`、`getTradeSignals`、`getBottomSignals`。
 > 前三个曾在本 README 与 `docs/architecture.md` 里被标为 Dashboard / WatchlistManage 使用，**属文档错误**（已更正）。
 
@@ -145,7 +195,7 @@ npm run preview  # 本地预览生产构建
 ## 目录结构
 
 ```
-src/                          # 共 19 个文件
+src/                          # 共 17 个文件
 ├── api/trader.js              # 所有后端 API 调用函数
 ├── styles/
 │   ├── theme.js               # ant-design-vue 主题 token

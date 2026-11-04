@@ -121,12 +121,16 @@ dev 模式 API 统一走 vite proxy（`VITE_API_BASE_URL` 留空）。**不要�
 
 | 改动涉及 | 必跑 |
 |---|---|
-| 任意改动 | `npm run build` 通过（`chunks > 500 kB` 警告可忽略，属已知） |
+| 任意改动 | `bash scripts/check.sh` 通过（= `npm run check`：锁文件安装 → ESLint → 单测 → 构建。`chunks > 500 kB` 警告可忽略，属已知） |
 | `/livermore` 或 K 线标注 | `node scripts/smoke-livermore.mjs`（98 项） |
 | K 线支撑压力位 | `node scripts/smoke-keylevels.mjs`（14 项） |
 | 周期切换 | `node scripts/smoke-ktype.mjs`（12 项） |
 
 验收脚本前置：**前端 5173 与后端 8000 都在运行**，用本机 Chrome 驱动，不装 npm 依赖。
+
+**CI**：`.github/workflows/ci.yml` 的 `check` job **执行的就是 `scripts/check.sh`**，不另写一套命令。
+因此「本地绿、CI 红」只可能来自环境差异，不得因此调整 CI 命令去迁就。CI 另含独立的全历史密钥扫描，
+**不含任何部署动作**（部署仍走 `git push` 到服务器 bare repo）。
 
 **部署注意**（改静态资源必须知道）：
 
@@ -149,4 +153,11 @@ dev 模式 API 统一走 vite proxy（`VITE_API_BASE_URL` 留空）。**不要�
 
 **合规检查**：`plan.md` 的 Constitution Check 段落逐条勾选，不适用的也要写一行理由。
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-01 | **Last Amended**: 2026-11-01
+**修订记录**：
+
+- **1.1.0（2026-11-04）** §三 质量门从「`npm run build` 通过」升级为「`bash scripts/check.sh` 通过」。
+  **理由**：只跑构建抓不到规范与逻辑回归（这一版接入 CI 时，ESLint 当场抓出 21 处问题，其中
+  `WatchlistManage.vue` 的 `refreshing` 未声明是点按钮必崩的真缺陷、`ScoresOverview.vue` 是模板解析错误）。
+  质量门的判定标准必须跟着实际执行的门禁走，否则原则层会变成一份过时的声明。
+
+**Version**: 1.1.0 | **Ratified**: 2026-11-01 | **Last Amended**: 2026-11-04

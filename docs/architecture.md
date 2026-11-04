@@ -591,3 +591,32 @@ node scripts/smoke-livermore.mjs   # 利弗莫尔模块（98 项）
 | **边界标的断言** | 无整理平台的 `US.ARM`（不出现 `--` 占位、字段收窄为 2）、港股 `HK.01211`、4H 周期不请求利弗莫尔 |
 
 截图输出到 `F:/TraderAnalysis/logs/`（`livermore-page.png` / `livermore-chart.png`）。
+
+### 9.5 质量门与 CI（2026-11-04 新增）
+
+```bash
+npm run check            # = bash scripts/check.sh：npm ci → eslint → vitest → vite build
+npm run lint             # 只查规范
+npm run test:unit        # 只跑单测（纯离线）
+bash scripts/check.sh --fresh   # 强制 npm ci 从零装（验证锁文件，CI 每次都这么跑）
+```
+
+| 环节 | 实现 | 位置 | 覆盖什么 |
+|---|---|---|---|
+| 依赖安装 | `npm ci` | `scripts/check.sh` | 锁文件与 `package.json` 不同步 |
+| 规范 | ESLint 10 flat config，`eslint-plugin-vue` **`essential`** | `eslint.config.js` | 未定义/未使用变量、模板解析错误、重复键 |
+| 单测 | Vitest 3，`environment: node` | `tests/unit/` | API 层请求构造（mock axios）、利弗莫尔请求不外溢、路由表 ↔ 页面文件、README API 表 ↔ `trader.js` |
+| 构建 | `vite build` | — | 打包失败、`dist/` 未产出 |
+| 密钥扫描 | gitleaks 全历史 | `.github/workflows/ci.yml` 的 `security` job | 历史与新增提交中的密钥 |
+
+设计要点：
+
+- **CI 不另写命令**，`check` job 直接执行 `bash scripts/check.sh --fresh`。同源是「本地绿 = CI 绿」的唯一保证。
+- **顺序按失败成本排**：锁文件 → 规范（秒级）→ 单测（亚秒）→ 构建（10s+）。便宜的前置失败就不该跑昂贵的。
+- **单测不碰 DOM、不连后端**：`environment: node`，axios 被整体替换成记录器。CI 里没有 5173/8000，测试必须自给自足。
+- **ESLint 强度是 `essential` 而非 `recommended`**：本仓库 6500+ 行存量代码，`recommended` 的风格规则
+  （`attributes-order`、`html-indent`）会产生成百条违例，只能靠重排业务代码来满足。升级强度属独立需求。
+- **不做**：覆盖率门禁（薄逻辑层上的低阈值是假门禁）、Prettier（同上）、部署 job（线上仍走 `git push` + hook）。
+
+首跑实测（2026-11-04，Windows 本机）：`--fresh` 全流程 218s，其中 `npm ci` 约 180s（网络），
+lint + 62 条单测 + 构建合计约 20s。CI 上因 npm 缓存，预期 60~90s。

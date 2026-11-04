@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-04
 
-**Status**: Draft
+**Status**: Implemented — 本地全流程与反向验证已完成（见 `tasks.md` §验证记录）；首跑远端验证待 push 后回填
 
 **Input**: User description: "为我的前端仓库加上CI流程，前端仓库的本地地址在：F:\TraderAnalysisFrontend，如果有可能。在添加CI流程时请遵循spec-kit原则"
 
