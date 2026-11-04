@@ -95,6 +95,15 @@ jobs:
       # 否则「上传阶段就失败」会被误判成「切换失败」，把上一版的旧产物盖到线上。
       SWAP_MARK: /var/www/.deploy-in-progress
     steps:
+      - name: Checkout pinned host key only
+        # deploy 不构建代码，本来不需要整个仓库；但主机公钥钉在 .github/deploy_known_hosts 里，
+        # 必须 checkout 才能读到。用 sparse checkout 只取这一个文件（首次失败就是漏了这一步：
+        # 「cp: cannot stat '.github/deploy_known_hosts'」）。
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/deploy_known_hosts
+          sparse-checkout-cone-mode: false
+
       - name: Download dist artifact
         uses: actions/download-artifact@v8
         with:
@@ -130,6 +139,8 @@ jobs:
           # 主机公钥已钉在仓库里（.github/deploy_known_hosts）：不跑 ssh-keyscan。
           # 运行时扫描等于「第一次见到的就是真的」，中间人可在那一刻换掉公钥；
           # 钉住之后 StrictHostKeyChecking=yes 才有意义。
+          [ -f .github/deploy_known_hosts ] \
+            || { echo "::error::缺少 .github/deploy_known_hosts（deploy job 的 sparse checkout 是否被跳过？）"; exit 1; }
           cp .github/deploy_known_hosts ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
