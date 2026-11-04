@@ -131,13 +131,23 @@ T008-T011 (lint)   T012-T017 (test)      ← 可并行
 
 | 项 | 实测 | 结论 |
 |---|---|---|
-| SC-001 流水线耗时 | 本机 `--fresh` 全流程 **218s**（`npm ci` ≈180s 走网络），非 fresh 全绿 **20s**；CI 有 npm 缓存，预期 60~90s | ✅ 未来冷启动也在 6 分钟内 |
+| SC-001 流水线耗时 | 本机 `--fresh` 全流程 **218s**（`npm ci` ≈180s 走网络），非 fresh 全绿 **20s**；**CI 首跑 38s**（`check` 36s，其中装依赖+lint+62 测+构建 26s；gitleaks 11s） | ✅ 远低于 6 分钟 |
 | SC-002 同源 | CI 的 `check` job 唯一命令是 `bash scripts/check.sh --fresh`，本地是 `bash scripts/check.sh` | ✅ 字面同源（同一个文件） |
 | SC-003 存量违规 | 首次全库 **21 条** → 现在 **0 条**（`npm run lint` exit 0） | ✅ 清零并保持 |
 | SC-004 用例数 | **62 条**（api 27 / router 25 / livermore 6 / docs-sync 4），离线 <1s | ✅ 远超 ≥15 |
 | SC-005 三类红灯 | 见下方「反向验证实测」 | ✅ 三类各自独立变红 |
-| SC-006 纯文档跳过 | `paths-ignore: ['docs/**','**/*.md']` 已配置 | ⏳ 待首次远端验证 |
+| SC-006 纯文档跳过 | `paths-ignore: ['docs/**','**/*.md']`；本文件所在的纯文档提交已推送验证 | ✅ 未产生新运行 |
 | SC-007 文档可执行 | 本文档与 `README.md` / `AGENTS.md` 里的命令均已逐条真跑 | ✅ |
+| FR-006 产物 | CI 上传 `dist-<sha>`（**1187 KB**，保留 7 天）+ gitleaks SARIF | ✅ |
+
+### 远端首跑记录（run [41833043569](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/runs/41833043569)，提交 `3eaea21`）
+
+| job | 结论 | 耗时 | 步骤 |
+|---|---|---|---|
+| `check (Node 22)` | ✅ success | 36s | checkout 1s / setup-node 1s / **check.sh 26s** / upload-artifact 2s |
+| `secret scan (gitleaks)` | ✅ success | 11s | checkout 1s / gitleaks 5s |
+
+整体 38s，无 skipped 步骤（逐步骤核对，不是「整体绿但内部跳过」）。
 
 ### 反向验证实测（证明红绿灯真的会亮，而不是只写了一条 yaml）
 
