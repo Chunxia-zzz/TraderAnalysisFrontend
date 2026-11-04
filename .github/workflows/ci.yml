@@ -123,6 +123,10 @@ jobs:
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
           chmod 600 ~/.ssh/deploy
+          # 先验密钥本身：粘贴被截断 / 尾部混入多余字符时，这里报错比 ssh 的
+          # "Load key: invalid format" 更容易定位（实测这类错误最常见）
+          ssh-keygen -y -f ~/.ssh/deploy > /dev/null 2>&1 \
+            || { echo "::error::DEPLOY_SSH_KEY 不是合法的 OpenSSH 私钥（检查是否粘贴完整）"; exit 1; }
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes \
             "root@$DEPLOY_HOST" 'echo "SSH 就绪: $(hostname)"'
