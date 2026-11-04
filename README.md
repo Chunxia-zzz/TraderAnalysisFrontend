@@ -110,6 +110,8 @@ git push GitHub (main)
 - **PR 不部署**：只有 `push` 到 `main` 才部署。PR 通过检查也不动线上。
 - **检查红就不上线**：`deploy` job 显示 `skipped`，线上一个字节都不变。
 - 上线的是 **CI 构建的那份产物**（artifact `dist-<sha>`），服务器不再跑 `npm ci` / `npm run build`。
+- **整次部署只建立 1 条 SSH 连接**（上传与切换在同一个会话内完成，失败时回滚再加 1 条）。
+  服务器主机公钥钉在 `.github/deploy_known_hosts`，**不在运行时 `ssh-keyscan`**——否则等于信任第一次见到的密钥。
 - 部署后自动健康检查四项：首页 200、`#app` 挂载点存在、`index.html` 的 `Cache-Control` **恰好 1 个**、
   页面引用的首个 JS 资源可取回。任一不过 → **自动换回上一版**。
 

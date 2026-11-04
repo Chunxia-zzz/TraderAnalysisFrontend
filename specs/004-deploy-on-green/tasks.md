@@ -70,6 +70,18 @@
 - [x] **T026** SC-005：部署日志输出 `sha=5b89c5b`；线上 asset 名 `index-BGAl7ZYY.js`
       与本机构建 `index-B3fBnsiR.js` **不同**，原因见下方「构建指纹差异」
 
+## Phase 8: 收敛（2026-11-04 晚，用户确认后执行）
+
+- [x] **T027** 三次 SSH 合并为**一次**：删掉「Prepare SSH key」里的探活连接，上传 + 切换放进同一个
+      远端会话（`tar -xzf -` 读完后 shell 继续执行后续命令）。正常路径 3 → 1 条连接，失败回滚时 +1
+- [x] **T028** 主机公钥固化：`ssh-keyscan` 改为 `cp .github/deploy_known_hosts ~/.ssh/known_hosts`，
+      ssh 显式 `StrictHostKeyChecking=yes`。运行时扫描 = 信任第一次见到的密钥，钉住才有防中间人意义
+- [x] **T029** 本地用合并后的同一段脚本做真实部署验证：1 条连接完成「解包 44 文件 → 切换 → 清标记」，
+      无标记残留，线上 200
+
+**为什么这不是新 spec**：只是 004 内部的步骤合并与密钥来源调整，不改变「何时部署、部署什么、失败怎么办」
+三条契约（FR-001/003/006 均未变），属收敛项而非新需求。
+
 ## 验证记录（2026-11-04 实测）
 
 ### 远端全链路（run [41840934969](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/runs/41840934969)，提交 `5b89c5b`）

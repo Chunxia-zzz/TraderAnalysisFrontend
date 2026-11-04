@@ -61,6 +61,7 @@
 | `eslint.config.js` / `vitest.config.js` | 规范与单测配置。ESLint 强度刻意取 `essential`，见 §5.9 |
 | `tests/unit/` | 纯离线单测：API 层请求构造 / 路由表与页面文件 / README 与 API 表一致 |
 | `.github/workflows/ci.yml` | GitHub Actions：`check`（跑 `check.sh`）+ `security`（gitleaks 全历史）+ `deploy`（`needs: check`，仅 push main）。**上线只有这一条路** |
+| `.github/deploy_known_hosts` | 服务器主机公钥（公钥非机密）。deploy 用它做 `StrictHostKeyChecking=yes`，**不跑运行时 ssh-keyscan**；服务器重装后必须重新生成 |
 | `docs/architecture.md` | **现状技术方案**，页面细节以它为准 |
 | `docs/design-spec-v1-clean-financial.md` | v1 视觉设计稿。**§2/§3 逐页布局已脱节，不要当现状依据** |
 | `.specify/` | SDD 配置：`memory/constitution.md`（原则层）/ `templates/` / `scripts/` |

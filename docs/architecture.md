@@ -573,6 +573,11 @@ git push origin main（= GitHub）
 
 - **不重新构建**：部署复用 `check` 的 artifact，线上产物 = CI 验证过的字节。服务器因此不再需要 Node/npm。
 - **不用 rsync**：服务器（Alibaba Cloud Linux 3）没装 rsync，不为一次部署引入系统依赖 → `tar` 管道。
+- **一次部署只开 1 条 SSH 连接**（2026-11-04 收敛）：远端 shell 在 `tar -xzf -` 读完 stdin 后会继续执行
+  后续命令，所以「上传 + 切换」可以合并；此前拆成 3 条（探活 / 上传 / 切换），每次部署会在服务器
+  `secure` 日志里留 3 条登录记录，既慢也更容易触发云厂商的异常登录告警。失败回滚时再加 1 条。
+- **主机公钥固化**（`.github/deploy_known_hosts`，公钥非机密）：不跑运行时 `ssh-keyscan`，
+  配合 `StrictHostKeyChecking=yes` 才有真正的防中间人能力。服务器重装后须重新生成该文件。
 - **不做 symlink 原子切换**：需要改 Nginx root，收益低于风险；`mv` 目录的毫秒级窗口对个人站点可接受。
 - **写入只发生在 `.new`**：任何失败都不碰线上目录，这是「不留残局」的结构性保证。
 - **服务器 hook 已停用**：`post-receive` 现在只打印说明（原版备份 `post-receive.bak-20261104`）。
