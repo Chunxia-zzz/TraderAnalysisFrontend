@@ -324,7 +324,6 @@ function renderAssetChart(viewKey) {
   const history = assetHistory.value[viewKey]
   if (!assetChartRef.value || !history || history.length === 0) return
   if (!assetChartInstance) assetChartInstance = echarts.init(assetChartRef.value)
-  const tab = TABS.find(t => t.key === viewKey)
   const color = viewKey === 'gold' ? '#946800' : '#f7931a'
   assetChartInstance.setOption({
     tooltip: { trigger: 'axis' },

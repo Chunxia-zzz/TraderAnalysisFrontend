@@ -146,7 +146,7 @@
         <div v-if="activeFilter === 'all' || activeFilter === 'no_action'" class="card section" style="margin-bottom: 16px">
           <div class="section-header">
             <span class="section-title">中性</span>
-            <span class="section-badge">< 60</span>
+            <span class="section-badge">&lt; 60</span>
           </div>
           <div class="stock-table">
             <div

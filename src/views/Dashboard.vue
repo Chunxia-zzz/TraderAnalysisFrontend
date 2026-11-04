@@ -350,26 +350,9 @@ function pctDiff(price, base) {
   return pct > 0 ? `+${pct}%` : `${pct}%`
 }
 
-function strengthDots(n) {
-  const level = Math.min(Math.ceil(n / 2), 3)
-  return '●'.repeat(level) + '○'.repeat(3 - level)
-}
-
-function trendText(val) {
-  return { up: '↑ 上涨', down: '↓ 下跌', sideways: '→ 震荡' }[val] ?? val ?? '-'
-}
-
-function trendColorClass(val) {
-  return { up: 'text-up', down: 'text-down', sideways: '' }[val] ?? ''
-}
-
-function macdText(val) {
-  return { bullish: '偏多', bearish: '偏空', neutral: '中性' }[val] ?? '-'
-}
-
-function macdColorClass(val) {
-  return { bullish: 'text-up', bearish: 'text-down', neutral: '' }[val] ?? ''
-}
+// ESLint 接入时（003）删除了 5 个从未被引用的格式化函数
+// （strengthDots / trendText / trendColorClass / macdText / macdColorClass）：
+// 模板已改用下方 TIDE_LABELS 等映射，旧函数是重构后的残留。删除属行为等价。
 
 // ── 道氏趋势 ──
 const TIDE_LABELS = { up: '↑ 涨潮', down: '↓ 退潮', neutral: '— 无潮汐' }

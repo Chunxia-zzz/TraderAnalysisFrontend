@@ -24,7 +24,9 @@ ws.addEventListener('message', (ev) => {
     } else if (m.method === 'Runtime.consoleAPICalled' && m.params?.type === 'error') {
       pageErrors.push((m.params.args || []).map((a) => a.value ?? a.description ?? '').join(' '))
     }
-  } catch {}
+  } catch {
+    // 单条 WS 消息解析失败不应中止采集，忽略即可
+  }
 })
 await send('Runtime.enable')
 

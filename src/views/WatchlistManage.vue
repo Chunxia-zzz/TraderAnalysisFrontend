@@ -137,6 +137,9 @@ import { getWatchlist, addWatchlistStock, updateWatchlistStock, deleteWatchlistS
 const loading = ref(false)
 const sortBy = ref('discount_desc')
 const submitting = ref(false)
+// 「刷新快照」按钮的 loading 状态。模板与 handleRefreshAll 都引用它，
+// 但 003 接入 ESLint 前这里漏了声明 —— 点按钮会抛 ReferenceError（no-undef 抓到的真实缺陷）。
+const refreshing = ref(false)
 const list = ref([])
 const categories = ref({})
 const filters = reactive({ category: undefined, status: undefined, market: undefined, search: '' })
@@ -152,28 +155,9 @@ const columns = [
   { title: '操作', key: 'action', width: 120, fixed: 'right' },
 ]
 
-function statusColor(s) {
-  return { watching: 'blue', holding: 'green', exited: 'default' }[s] || 'default'
-}
-function statusLabel(s) {
-  return { watching: '观察中', holding: '持仓中', exited: '已退出' }[s] || s
-}
-
-const STRATEGY_MAP = {
-  hold_10d: { label: '持有10天', color: 'blue' },
-  hold_20d: { label: '持有20天', color: 'cyan' },
-  swing: { label: '波段操作', color: 'orange' },
-  trend_ma5: { label: '趋势MA5', color: 'green' },
-  trend_ma10: { label: '趋势MA10', color: 'lime' },
-  trend_ma20: { label: '趋势MA20', color: 'volcano' },
-}
-
-function strategyLabel(s) {
-  return STRATEGY_MAP[s]?.label || s
-}
-function strategyColor(s) {
-  return STRATEGY_MAP[s]?.color || 'default'
-}
+// ESLint 接入时（003）删除了 4 个从未被引用的辅助函数（statusColor / statusLabel /
+// STRATEGY_MAP / strategyLabel / strategyColor）：页面表格里没有 status / strategy 列，
+// 它们自始未被使用。删除属行为等价，若将来要展示这两列再从后端字段重建。
 
 async function fetchList() {
   loading.value = true
@@ -187,7 +171,7 @@ async function fetchList() {
     list.value = data.watchlist || []
     categories.value = data.categories || {}
     applySort()
-  } catch (e) {
+  } catch {
     message.error('加载标的池失败')
   } finally {
     loading.value = false
@@ -279,7 +263,7 @@ async function handleDelete(code) {
     await deleteWatchlistStock(code)
     message.success('已删除')
     fetchList()
-  } catch (e) {
+  } catch {
     message.error('删除失败')
   }
 }

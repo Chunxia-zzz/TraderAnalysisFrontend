@@ -82,7 +82,7 @@ try {
   check('存在「最近」标记', nearestBadge >= 1, `count=${nearestBadge}`)
 
   console.log('\n[5] 盈亏比')
-  const rrText = await evaluate(send, `document.querySelector('.kv-rr')?.innerText.replace(/\s+/g,' ').trim() || ''`)
+  const rrText = await evaluate(send, `document.querySelector('.kv-rr')?.innerText.replace(/\\s+/g,' ').trim() || ''`)
   check('盈亏比区域已渲染', rrText.includes('做多') && rrText.includes(': 1'), `实际="${rrText}"`)
 
   console.log('\n[6] 开关联动')
