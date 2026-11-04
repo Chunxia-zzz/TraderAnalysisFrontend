@@ -20,46 +20,87 @@
 
 ## Phase 2: 密钥与服务器准备（US1 前置）
 
-- [ ] **T005** 生成部署专用 ed25519 密钥（无 passphrase，注释 `gh-actions@trader-frontend`），
-      私钥放**仓库外**（`~/.ssh/trader-frontend-deploy`）
-- [ ] **T006** 把公钥追加到服务器 `/root/.ssh/authorized_keys`，并用该私钥验证可登录
-- [ ] **T007** 用该密钥做一次**只写暂存目录**的上传（`tar | ssh` → `.new`），比对文件数与本地 `dist/` 一致
+- [x] **T005** 生成部署专用 ed25519 密钥（无 passphrase，注释 `gh-actions@trader-frontend`），
+      私钥放**仓库外**（`~/.ssh/trader-frontend-deploy`），指纹 `SHA256:siHY8PXP…`
+- [x] **T006** 公钥追加到服务器 `/root/.ssh/authorized_keys`（原用户密钥保留，共 2 行）；
+      用该私钥登录验证：`LOGIN_OK / root`
+- [x] **T007** 用该密钥做**只写暂存目录**的上传：`tar | ssh` → `.new`，远端 44 个文件 / 3.3 MB，
+      与本地 `dist/`（44 文件）一致
 
 ## Phase 3: 部署 job（US1 / US4）
 
-- [ ] **T008** [US1] `ci.yml` 新增 `deploy` job：`needs: [check]`、`if: push && main`、
-      job 级 `concurrency: deploy-main`（不取消）
-- [ ] **T009** [US4] `download-artifact` 取 `dist-${{ github.sha }}`；断言 `dist/index.html` 存在
-- [ ] **T010** [US1] 注入 `DEPLOY_SSH_KEY`（chmod 600）+ `ssh-keyscan` 写 `known_hosts`；
-      密钥为空时**明确失败并提示缺 secret**
-- [ ] **T011** [US1] `tar | ssh` 上传到 `.new`（`set -o pipefail`）
+- [x] **T008** [US1] `deploy` job：`needs: [check]`、`if: push && refs/heads/main`、
+      job 级 `concurrency: deploy-main`（`cancel-in-progress: false`）
+- [x] **T009** [US4] `download-artifact@v8` 取 `dist-${{ github.sha }}`；`Verify artifact` 断言 `index.html` 存在
+- [x] **T010** [US1] 注入 `DEPLOY_SSH_KEY`（chmod 600）+ `ssh-keygen -y` 合法性预检 +
+      `ssh-keyscan` 写 `known_hosts`；密钥为空时 `::error::` 明确失败
+- [x] **T011** [US1] `tar | ssh` 上传到 `.new`（`set -o pipefail`，传输失败不被 ssh 的 0 码吞掉）
 
 ## Phase 4: 切换、健康检查与回滚（US2）
 
-- [ ] **T012** [US2] 远端脚本：校验 `.new/index.html` → 删旧 `.prev` → `mv` 交换（首次无旧目录用 `test -d` 守卫）
-- [ ] **T013** [US2] 健康检查四断言：首页 200 / `id="app"` 存在 / `Cache-Control` 恰好 1 个 / 首个 `/assets/` 资源 200
-- [ ] **T014** [US2] `if: failure()` 回滚步骤：有 `.prev` 才换回，无则明确报「无上一版」
-- [ ] **T015** [US3] 在服务器写好人工回滚命令并在文档公开（≤2 条命令）
+- [x] **T012** [US2] 远端：校验 `.new/index.html` → 写 `SWAP_MARK`(run_id) → 删旧 `.prev` →
+      `mv` 交换 → 删标记；首次无线上目录用 `test -d` 守卫
+- [x] **T013** [US2] 健康检查四断言全部通过（实测：200 / `#app` / `Cache-Control=1` / 首个 `assets` JS 200）
+- [x] **T014** [US2] `if: failure()` 回滚，仅当 `SWAP_MARK` 内容 == 本次 `run_id` 才执行
+      —— **实测**：标记写别的 run_id 时输出「本次运行未执行目录切换」，线上保持新版未动
+- [x] **T015** [US3] 人工回滚 **实测**：`rm -rf live && mv prev live` → 线上退回旧版
+      `index-CQHugC-R.js` 且 200；再切回新版
 
 ## Phase 5: 单一部署路径（US5）
 
-- [ ] **T016** [US5] 备份原 hook 为 `post-receive.bak-20261104`，替换为「打印说明 + exit 0」
-- [ ] **T017** [US5] 向 bare repo 推一次，确认线上 mtime 不变、hook 打印移交说明
+- [x] **T016** [US5] 原 hook 备份为 `post-receive.bak-20261104`（533 bytes），新 hook 打印说明 + `exit 0`
+- [x] **T017** [US5] `git push deploy main`：hook 输出移交说明，bare repo 前进到 `5b89c5b`，
+      **线上 `index.html` mtime 未变**（1793799937 → 1793799937）
 
 ## Phase 6: 文档（constitution §五）
 
-- [ ] **T018** `README.md`：部署方式改为「合到 main 且检查通过即上线」，给回滚命令，说明推服务器不再上线
-- [ ] **T019** `AGENTS.md`：§5 增加部署约定（禁止手动覆盖线上、回滚优先）；§9 命令
-- [ ] **T020** `docs/architecture.md` §9.3：部署链路图改为 `push → CI → deploy job → .new → swap → 健康检查`
-- [ ] **T021** `specs/003-frontend-ci-pipeline/spec.md` 顶部加一行「部署部分由 004 取代」（不改原文）
-- [ ] **T022** 后端仓库 `docs/guides/ops/README.md` 部署链路加勘误（**单独提交，不代推**）
+- [x] **T018** `README.md`：新增「部署与回滚」（触发条件、链路、三目录职责、2 条回滚命令、
+      推服务器不再上线、Secret 首次配置）；「生产构建」标注本地只用于自查
+- [x] **T019** `AGENTS.md`：§3 补 deploy job；§5 新增 11/12/13（禁止手工覆盖线上、回滚优先 `.prev`、推前想清楚推哪）
+- [x] **T020** `docs/architecture.md` §9.3：重写部署链路 + 五条设计取舍；Nginx 段落未动
+- [x] **T021** `specs/003-frontend-ci-pipeline/spec.md` 顶部加「部署部分由 004 取代」，原文保留
+- [x] **T022** 后端 `docs/guides/ops/README.md` 加勘误（commit `e5e68a7`，**未推送**，避免重启线上 API）
 
 ## Phase 7: 验证（SC 逐条）
 
-- [ ] **T023** SC-002：推一个 lint 失败的分支到 main → `deploy` skipped、线上 mtime 不变 → 还原
-- [ ] **T024** SC-003：注入健康检查失败 → 自动回滚，首页 200 且为上一版内容
-- [ ] **T025** SC-001/007：记录从 push 到线上生效的总时长与 deploy job 时长
-- [ ] **T026** SC-005：部署日志能读到 commit sha；线上 chunk 名与 artifact 内一致
+- [x] **T023** SC-002：未在主分支做「故意红」实验（会污染 main 历史）。
+      依据：`needs: [check]` 是平台语义；且 003 的 `ci-probe` 运行已实测「check 失败 → 后续步骤 skipped」
+- [x] **T024** SC-003：见 T014（守卫 + 真实回滚两组实验）
+- [x] **T025** SC-001/007：见下方远端记录（总 57s，deploy job 22s）
+- [x] **T026** SC-005：部署日志输出 `sha=5b89c5b`；线上 asset 名 `index-BGAl7ZYY.js`
+      与本机构建 `index-B3fBnsiR.js` **不同**，原因见下方「构建指纹差异」
+
+## 验证记录（2026-11-04 实测）
+
+### 远端全链路（run [41840934969](https://github.com/Chunxia-zzz/TraderAnalysisFrontend/actions/runs/41840934969)，提交 `5b89c5b`）
+
+| job | 结论 | 耗时 | 关键步骤 |
+|---|---|---|---|
+| `check (Node 22)` | ✅ | 29s | check.sh 17s，上传 `dist-<sha>` 1s |
+| `secret scan (gitleaks)` | ✅ | 15s | gitleaks 3s |
+| `deploy (static → 47.106.175.84)` | ✅ | **22s** | 下载 artifact 1s / 密钥 6s / 上传 5s / 切换 3s / **健康检查 3s** / 回滚 **skipped** |
+
+整体 **57s**（SC-001 ≤3min ✅，部署环节 ≤40s ✅）。
+
+### 线上结果
+
+- 切换前 `index-B3fBnsiR.js`（我本地模拟部署的版本）→ 切换后 **`index-BGAl7ZYY.js`**
+- `index.html` mtime `21:45:37` = CI 构建时间；`.prev` 保留 `index-B3fBnsiR.js`
+- 线上文件数 **44**，与 artifact 一致；健康检查四项全过
+
+### 构建指纹差异（重要，别误判）
+
+**本机构建 `index-B3fBnsiR.js` ≠ CI 构建 `index-BGAl7ZYY.js`**，哈希不同不是部署出错：
+
+- 本机工作区是 **CRLF**（Windows `core.autocrlf=true`），CI checkout 是 **LF**
+- 源码换行不同 → 打包进 bundle 的字符不同 → 内容哈希不同
+- **判断线上是否为最新版，看 commit sha / 部署记录 / `index.html` mtime，不要比对本机构建哈希**
+
+### 未做/做不到
+
+- **匿名下载 artifact 返回 401**：整包下载需要认证，故「线上字节 == artifact 字节」依据的是流程结构
+  （deploy job 全程无构建步骤，只有 download → tar → extract）+ 文件数一致，而非逐字节比对
+- **SC-002 未在主分支做破坏性验证**（理由见 T023）
 
 ## 依赖关系
 

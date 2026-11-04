@@ -121,6 +121,10 @@ git push GitHub (main)
 | `/var/www/trader-frontend.prev` | 上一版，回滚锚点，只保留 1 份 |
 | `/var/www/trader-frontend.new` | 暂存，上传先到这里，校验通过才交换 |
 
+> ⚠️ **判断线上是不是最新版，别比对本机构建的 chunk 名。** Windows 工作区是 CRLF、CI checkout 是 LF，
+> 源码换行不同 → `index-XXXX.js` 的内容哈希不同（实测 `index-B3fBnsiR.js` vs `index-BGAl7ZYY.js`）。
+> 正确的依据：部署记录里的 commit sha、或 `stat /var/www/trader-frontend/index.html` 的 mtime。
+
 ### 回滚（≤2 条命令，不需要重新构建）
 
 ```bash

@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-04
 
-**Status**: Draft
+**Status**: Implemented — 远端全链路已跑通（run 41840934969，57s 全绿；deploy 22s）。验证记录见 `tasks.md`
 
 **Input**: User description: "常理来说，应该是 push→CI→CD 的流程，也就是完成自动推代码、测试、部署，只要分支合到 main，应用就是新版本。使用方案A的话，我需要做什么额外的操作吗？如果不需要，你直接按照A方案，用spec范式把这个方案全部落地"
 
