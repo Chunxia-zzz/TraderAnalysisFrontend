@@ -41,6 +41,9 @@ npm run build    # 输出到 dist/ 目录
 npm run preview  # 本地预览生产构建
 ```
 
+> ⚠️ **本地 `npm run build` 只用于自查，不要手工把 `dist/` 传上线。**
+> 上线由流水线执行，见下一节「部署与回滚」。
+
 > **构建时那条 `chunks are larger than 500 kB` 警告可以忽略** —— 它是 Vite 的默认建议阈值，
 > 不是错误，不影响功能与正确性。主包较大（**1568 KB**，2026-11-01 实测 `npm run build`；
 > 此前记为 1531 KB，属旧测量值）的根因是 `src/main.js` 全量注册了
@@ -90,6 +93,64 @@ bash scripts/check.sh --fresh   # 强制 npm ci 从零安装，验证锁文件�
   收益与噪音不成比例。
 
 > CI 成功后可在运行页面下载当次的 `dist` 产物（保留 7 天），用于核对线上跑的是哪一版。
+
+## 部署与回滚
+
+### 什么时候上线
+
+**只要代码进了 `main` 且四道检查全绿，就自动上线**，不需要第二次推送：
+
+```
+git push GitHub (main)
+   └─ check：npm ci → eslint → 62 条单测 → vite build → 上传 dist-<sha>
+        └─ deploy（needs: check）→ tar 到 /var/www/trader-frontend.new
+             → 校验 → mv 交换（旧版留作 .prev）→ 健康检查 → 完成
+```
+
+- **PR 不部署**：只有 `push` 到 `main` 才部署。PR 通过检查也不动线上。
+- **检查红就不上线**：`deploy` job 显示 `skipped`，线上一个字节都不变。
+- 上线的是 **CI 构建的那份产物**（artifact `dist-<sha>`），服务器不再跑 `npm ci` / `npm run build`。
+- 部署后自动健康检查四项：首页 200、`#app` 挂载点存在、`index.html` 的 `Cache-Control` **恰好 1 个**、
+  页面引用的首个 JS 资源可取回。任一不过 → **自动换回上一版**。
+
+服务器目录：
+
+| 路径 | 作用 |
+|---|---|
+| `/var/www/trader-frontend` | 线上，Nginx 静态根（本次未改 Nginx 配置） |
+| `/var/www/trader-frontend.prev` | 上一版，回滚锚点，只保留 1 份 |
+| `/var/www/trader-frontend.new` | 暂存，上传先到这里，校验通过才交换 |
+
+### 回滚（≤2 条命令，不需要重新构建）
+
+```bash
+# 在服务器上执行
+ssh root@47.106.175.84
+rm -rf /var/www/trader-frontend && mv /var/www/trader-frontend.prev /var/www/trader-frontend
+```
+
+没有 `.prev` 时会明确报「无上一版可回滚」——**先确认目录存在，别在没锚点时删线上**：
+
+```bash
+ssh root@47.106.175.84 'test -d /var/www/trader-frontend.prev && echo 可回滚 || echo 无上一版'
+```
+
+### 推服务器不再上线
+
+服务器 bare repo 的 `post-receive` 已改成只打印说明、不再构建与覆盖（原 hook 备份为
+`post-receive.bak-20261104`）。`git push` 到服务器只更新裸库，**线上不会变**。
+
+> 背景：原 hook 是 `checkout → npm ci → npm run build → rm -rf 线上 → cp`，且没有 `set -e`。
+> 构建中途失败时 `dist/` 已被 Vite 清空，`rm -rf` 又已删掉线上 → **白屏**。
+> 见 `specs/004-deploy-on-green/`。
+
+### 首次配置（已由 2026-11-04 完成，换机器/换仓库时需要）
+
+GitHub → Settings → Secrets and variables → Actions → `DEPLOY_SSH_KEY`：
+部署专用 ed25519 私钥全文（无 passphrase）。对应的公钥带注释 `gh-actions@trader-frontend`
+在服务器 `/root/.ssh/authorized_keys`。
+
+可选：加仓库变量 `DEPLOY_HOST` 覆盖服务器地址（默认 `47.106.175.84`）。
 
 ## 功能页面
 

@@ -550,9 +550,36 @@ npm run dev   # http://localhost:5173
 
 ### 9.3 生产部署
 
-```bash
-npm run build   # 生成 dist/ 目录
+**（2026-11-04 起）上线由 GitHub Actions 执行，本地 `npm run build` 只用于自查。**
+
 ```
+git push origin main（= GitHub）
+  └─ check：npm ci → eslint → vitest → vite build → upload artifact dist-<sha>
+       └─ deploy（needs: check，仅 push main）
+            ├─ download-artifact dist-<sha>
+            ├─ tar | ssh → /var/www/trader-frontend.new
+            ├─ 校验 index.html → rm -rf .prev → mv live→prev → mv new→live
+            ├─ 健康检查：200 / #app / Cache-Control 恰好 1 / 首个 assets 资源 200
+            └─ 失败 → if: failure() 回滚（仅当本次确实切换过，靠 /var/www/.deploy-in-progress 判定）
+```
+
+| 目录 | 作用 |
+|---|---|
+| `/var/www/trader-frontend` | 线上，Nginx 静态根（本节下方的 Nginx 配置未变） |
+| `/var/www/trader-frontend.prev` | 上一版，回滚锚点（仅 1 份） |
+| `/var/www/trader-frontend.new` | 暂存，上传先到此，校验后才交换 |
+
+设计取舍（详见 `specs/004-deploy-on-green/`）：
+
+- **不重新构建**：部署复用 `check` 的 artifact，线上产物 = CI 验证过的字节。服务器因此不再需要 Node/npm。
+- **不用 rsync**：服务器（Alibaba Cloud Linux 3）没装 rsync，不为一次部署引入系统依赖 → `tar` 管道。
+- **不做 symlink 原子切换**：需要改 Nginx root，收益低于风险；`mv` 目录的毫秒级窗口对个人站点可接受。
+- **写入只发生在 `.new`**：任何失败都不碰线上目录，这是「不留残局」的结构性保证。
+- **服务器 hook 已停用**：`post-receive` 现在只打印说明（原版备份 `post-receive.bak-20261104`）。
+  原实现是 `checkout → npm ci → build → rm -rf 线上 → cp`，无 `set -e`，构建失败会导致白屏。
+
+回滚：`rm -rf /var/www/trader-frontend && mv /var/www/trader-frontend.prev /var/www/trader-frontend`
+（≤2 条命令，不需重新构建；无 `.prev` 时先确认，别在没锚点时删线上）。
 
 `dist/` 是纯静态文件，可用 Nginx/Caddy 托管。API 请求需通过反向代理转发到后端。
 

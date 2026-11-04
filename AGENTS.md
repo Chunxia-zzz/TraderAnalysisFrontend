@@ -60,7 +60,7 @@
 | `scripts/smoke-*.mjs` | 零依赖 CDP 验收脚本（需本机 Chrome + 前后端在跑，**不在 CI 里**） |
 | `eslint.config.js` / `vitest.config.js` | 规范与单测配置。ESLint 强度刻意取 `essential`，见 §5.9 |
 | `tests/unit/` | 纯离线单测：API 层请求构造 / 路由表与页面文件 / README 与 API 表一致 |
-| `.github/workflows/ci.yml` | GitHub Actions：`check`（跑 `check.sh`）+ `security`（gitleaks 全历史）；**无部署 job** |
+| `.github/workflows/ci.yml` | GitHub Actions：`check`（跑 `check.sh`）+ `security`（gitleaks 全历史）+ `deploy`（`needs: check`，仅 push main）。**上线只有这一条路** |
 | `docs/architecture.md` | **现状技术方案**，页面细节以它为准 |
 | `docs/design-spec-v1-clean-financial.md` | v1 视觉设计稿。**§2/§3 逐页布局已脱节，不要当现状依据** |
 | `.specify/` | SDD 配置：`memory/constitution.md`（原则层）/ `templates/` / `scripts/` |
@@ -99,6 +99,14 @@ specify extension add bug          # 重建缺陷三件套命令（assess / fix 
 10. **不要为了过 lint 去改强度**：ESLint 只开 `eslint-plugin-vue` 的 `essential`（挡真 bug 的规则）。
     想加风格规则（`recommended`）等于要求重排 6500+ 行存量代码 —— 那是**独立需求，要单独提 spec**，
     不是顺手改一行配置。
+11. **上线只能由流水线执行**（specs/004-deploy-on-green）：`push main` + `check` 绿 → `deploy` job →
+    `tar` 到 `/var/www/trader-frontend.new` → 校验 → `mv` 交换。**禁止**手工 `scp`/`cp` 覆盖
+    `/var/www/trader-frontend`，也**不要**恢复服务器 `post-receive` 的构建逻辑（原版备份在
+    `post-receive.bak-20261104`，仅作查阅）。
+12. **回滚优先用 `.prev`，不重新构建**：`rm -rf /var/www/trader-frontend && mv /var/www/trader-frontend.prev /var/www/trader-frontend`。
+    先 `test -d` 确认锚点存在；没有 `.prev` 时删线上等于把站点打空。
+13. **`git push` 前想清楚推哪**：`origin` 现在只指向 GitHub（双 URL 已拆，见 `git remote -v`），
+    推 GitHub 才会触发流水线。推服务器 bare repo 只更新裸库、**不再上线**。
 
 ## 6. 已知技术债（不要当 bug 修）
 
@@ -164,6 +172,15 @@ npm run check              # = bash scripts/check.sh：npm ci → lint → 单�
 npm run lint               # 只查规范（ESLint，全库 0 违例）
 npm run test:unit          # 只跑单测（纯离线，不需要后端/浏览器）
 bash scripts/check.sh --fresh   # 强制 npm ci 从零装，验证锁文件（CI 每次都这么跑）
+
+# ── 上线与回滚（部署由流水线执行，这里只用于核对/应急）──
+git push origin main                    # 只推 GitHub → 触发 check → 自动 deploy
+ssh root@47.106.175.84 'ls -l /var/www/trader-frontend/assets/index-*.js'   # 线上是哪一版
+curl -s http://47.106.175.84/ | grep -o '/assets/index-[^"]*\.js' | head -1
+
+# 回滚（先确认锚点，再换目录）
+ssh root@47.106.175.84 'test -d /var/www/trader-frontend.prev && echo 可回滚 || echo 无上一版'
+ssh root@47.106.175.84 'rm -rf /var/www/trader-frontend && mv /var/www/trader-frontend.prev /var/www/trader-frontend'
 
 # ── 需真实浏览器的验收（不在 CI 里）──
 node scripts/smoke-livermore.mjs   # 利弗莫尔模块（98 项）
