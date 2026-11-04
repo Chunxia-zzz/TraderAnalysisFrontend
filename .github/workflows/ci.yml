@@ -64,3 +64,130 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── CD：把 check 产出的那一份 dist 发到线上（specs/004-deploy-on-green）───────
+  # 三条硬约束，缺一不可：
+  #   1) needs: [check]  —— 部署是检查的下游，不是并行的另一条路
+  #   2) 只 push main    —— PR 通过检查也不上线（否则每个 PR 都能改生产）
+  #   3) 用 artifact     —— 上线的必须是 CI 验证过的同一份字节，不重新构建
+  #
+  # 目录约定（服务器）：
+  #   /var/www/trader-frontend        线上，Nginx 静态根（不变）
+  #   /var/www/trader-frontend.new    暂存，先传到这里再校验
+  #   /var/www/trader-frontend.prev   上一版，回滚锚点，只保留 1 份
+  deploy:
+    name: deploy (static → ${{ vars.DEPLOY_HOST || '47.106.175.84' }})
+    needs: [check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 与 workflow 级 concurrency 分开：连续两次推送时，部署必须排队而不是互相覆盖
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST || '47.106.175.84' }}
+      RUN_ID: ${{ github.run_id }}
+      LIVE_DIR: /var/www/trader-frontend
+      NEW_DIR: /var/www/trader-frontend.new
+      PREV_DIR: /var/www/trader-frontend.prev
+      # 切换期间的标记：回滚只在这个标记属于本次运行时才执行。
+      # 否则「上传阶段就失败」会被误判成「切换失败」，把上一版的旧产物盖到线上。
+      SWAP_MARK: /var/www/.deploy-in-progress
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+
+      - name: Verify artifact has index.html
+        run: |
+          set -euo pipefail
+          if [ ! -f dist/index.html ]; then
+            echo "::error::artifact 里没有 index.html，拒绝部署（sha=${{ github.sha }}）"
+            exit 1
+          fi
+          echo "产物文件数: $(find dist -type f | wc -l)，大小: $(du -sh dist | cut -f1)"
+
+      - name: Prepare SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          # 缺 secret 时必须明确失败：静默跳过会让「部署成功」变成谎言
+          if [ -z "${DEPLOY_SSH_KEY:-}" ]; then
+            echo "::error::缺少 secret DEPLOY_SSH_KEY。添加方式见 specs/004-deploy-on-green/plan.md §3"
+            exit 1
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes \
+            "root@$DEPLOY_HOST" 'echo "SSH 就绪: $(hostname)"'
+
+      - name: Upload to staging dir
+        # tar 管道而不是 rsync：服务器（Alibaba Cloud Linux 3）没有 rsync，
+        # 也不该为一次部署去装包。set -o pipefail 是必须的 —— 否则 tar 失败
+        # 会被 ssh 的 0 退出码吞掉，变成假绿。
+        run: |
+          set -euo pipefail
+          tar -czf - -C dist . | ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes \
+            "root@$DEPLOY_HOST" "set -e
+              rm -rf $NEW_DIR
+              mkdir -p $NEW_DIR
+              tar -xzf - -C $NEW_DIR
+              echo \"暂存完成: \$(find $NEW_DIR -type f | wc -l) 个文件\""
+
+      - name: Swap live dir (keep previous)
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes root@$DEPLOY_HOST "set -e
+            test -f $NEW_DIR/index.html || { echo '暂存目录缺少 index.html'; exit 1; }
+            echo '$RUN_ID' > $SWAP_MARK
+            rm -rf $PREV_DIR
+            if [ -d $LIVE_DIR ]; then mv $LIVE_DIR $PREV_DIR; fi
+            mv $NEW_DIR $LIVE_DIR
+            rm -f $SWAP_MARK
+            echo \"已切换: \$(date -u +%FT%TZ) sha=${{ github.sha }}\""
+
+      - name: Health check
+        # 四断言：能访问 / 挂载点存在 / Cache-Control 恰好 1 个 / 带哈希的资源可取回。
+        # 第三条来自 constitution §三：用 expires 会输出两个同名头，必须挡住。
+        run: |
+          set -euo pipefail
+          BASE="http://$DEPLOY_HOST"
+          code=$(curl -sS -o /tmp/index.html -w '%{http_code}' --retry 3 --retry-delay 2 "$BASE/")
+          if [ "$code" != "200" ]; then echo "::error::首页返回 $code"; exit 1; fi
+          grep -q 'id="app"' /tmp/index.html || { echo "::error::页面缺少 #app 挂载点"; exit 1; }
+          cc=$(curl -sS -D- -o /dev/null "$BASE/" | grep -ci 'cache-control' || true)
+          if [ "$cc" != "1" ]; then echo "::error::Cache-Control 头数量=$cc，应为 1（检查 Nginx 是否用了 expires）"; exit 1; fi
+          asset=$(grep -o '/assets/[^"]*\.js' /tmp/index.html | head -1)
+          if [ -z "$asset" ]; then echo "::error::首页没有引用任何 JS 资源"; exit 1; fi
+          ac=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE$asset")
+          if [ "$ac" != "200" ]; then echo "::error::资源 $asset 返回 $ac"; exit 1; fi
+          echo "健康检查通过：200 / #app / Cache-Control=1 / $asset=200"
+
+      - name: Rollback to previous release
+        # GitHub Actions 没有 try/catch，失败后正常步骤会被跳过，if: failure() 是唯一补偿点。
+        # 只有「本次运行确实切换过」才回滚：上传阶段失败时线上从未被改动，回滚反而会倒退一个版本。
+        if: failure()
+        run: |
+          set -euo pipefail
+          [ -f ~/.ssh/deploy ] || { echo "::warning::SSH 未就绪，无法回滚（线上未被修改）"; exit 0; }
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes root@$DEPLOY_HOST "set -e
+            if [ -f $SWAP_MARK ] && [ \"\$(cat $SWAP_MARK)\" = '$RUN_ID' ]; then
+              if [ -d $PREV_DIR ]; then
+                rm -rf $LIVE_DIR
+                mv $PREV_DIR $LIVE_DIR
+                rm -f $SWAP_MARK
+                echo '已回滚到上一版'
+              else
+                rm -f $SWAP_MARK
+                echo '本次切换前无线上目录（首次部署），无可回滚'
+              fi
+            else
+              echo '本次运行未执行目录切换，线上未被改动，无需回滚'
+            fi"
+          echo "回滚后首页状态码: $(curl -sS -o /dev/null -w '%{http_code}' "http://$DEPLOY_HOST/")"
