@@ -39,15 +39,7 @@
         <template v-if="emaCross && mainTab === 'bull'">
           <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">空转多 — EMA5 上穿 EMA30</span>
-            <div class="ema-tabs">
-              <span class="ema-tab" :class="{ active: emaTab === '4h' }" @click="emaTab = '4h'">
-                4H <em>{{ (emaCross.bull_4h?.length || 0) }}</em>
-              </span>
-              <span class="ema-tab" :class="{ active: emaTab === '1d' }" @click="emaTab = '1d'">
-                日线 <em>{{ (emaCross.bull_1d?.length || 0) }}</em>
-              </span>
-            </div>
+            <span class="section-title">空转多 — EMA5 上穿 EMA30（日线）</span>
           </div>
           <div class="stock-table">
             <div
@@ -61,7 +53,7 @@
               <span class="row-name">{{ item.detail?.close ? '$' + item.detail.close : '' }}</span>
               <div class="row-badges">
                 <span class="badge badge-green">↑ 空转多</span>
-                <span class="badge badge-gray">{{ emaTab === '4h' ? '4H' : '日线' }}</span>
+                <span class="badge badge-gray">日线</span>
               </div>
               <span class="ema-detail mono">EMA5={{ item.detail?.ema5 }} / EMA30={{ item.detail?.ema30 }}</span>
             </div>
@@ -74,15 +66,7 @@
         <template v-else-if="emaCross && mainTab === 'bear'">
           <div class="card section" style="margin-bottom: 16px">
           <div class="section-header">
-            <span class="section-title">多转空 — EMA5 下穿 EMA30</span>
-            <div class="ema-tabs">
-              <span class="ema-tab" :class="{ active: emaTab === '4h' }" @click="emaTab = '4h'">
-                4H <em>{{ (emaCross.bear_4h?.length || 0) }}</em>
-              </span>
-              <span class="ema-tab" :class="{ active: emaTab === '1d' }" @click="emaTab = '1d'">
-                日线 <em>{{ (emaCross.bear_1d?.length || 0) }}</em>
-              </span>
-            </div>
+            <span class="section-title">多转空 — EMA5 下穿 EMA30（日线）</span>
           </div>
           <div class="stock-table">
             <div
@@ -96,7 +80,7 @@
               <span class="row-name">{{ item.detail?.close ? '$' + item.detail.close : '' }}</span>
               <div class="row-badges">
                 <span class="badge badge-red">↓ 多转空</span>
-                <span class="badge badge-gray">{{ emaTab === '4h' ? '4H' : '日线' }}</span>
+                <span class="badge badge-gray">日线</span>
               </div>
               <span class="ema-detail mono">EMA5={{ item.detail?.ema5 }} / EMA30={{ item.detail?.ema30 }}</span>
             </div>
@@ -237,7 +221,6 @@ const emaCross = ref(null)
 const dailyPicks = ref([])
 const dailyPicksDate = ref('')
 const mainTab = ref('bull')
-const emaTab = ref('4h')
 
 /** 主升浪龙头：动量评分 ≥ 70 */
 const leaders = computed(() => {
@@ -296,28 +279,28 @@ function msBadgeClass(item) {
   return item.ms_discount_pct >= 0 ? 'badge-green' : 'badge-red'
 }
 
-/** 空转多信号：按周期过滤 */
+/** 空转多信号（仅日线；4H 已于 2026-11-08 下线） */
 const bullFiltered = computed(() => {
   if (!emaCross.value) return []
-  return emaCross.value[`bull_${emaTab.value}`] || []
+  return emaCross.value.bull_1d || []
 })
 
-/** 多转空信号：按周期过滤 */
+/** 多转空信号（仅日线） */
 const bearFiltered = computed(() => {
   if (!emaCross.value) return []
-  return emaCross.value[`bear_${emaTab.value}`] || []
+  return emaCross.value.bear_1d || []
 })
 
-/** 空转多总数量 */
+/** 空转多数量 */
 const bullCount = computed(() => {
   if (!emaCross.value) return 0
-  return (emaCross.value.bull_4h?.length || 0) + (emaCross.value.bull_1d?.length || 0)
+  return emaCross.value.bull_1d?.length || 0
 })
 
-/** 多转空总数量 */
+/** 多转空数量 */
 const bearCount = computed(() => {
   if (!emaCross.value) return 0
-  return (emaCross.value.bear_4h?.length || 0) + (emaCross.value.bear_1d?.length || 0)
+  return emaCross.value.bear_1d?.length || 0
 })
 
 function scorePillClass(score) {
@@ -507,31 +490,6 @@ onMounted(loadData)
 .badge-red   { color: var(--red);       background: var(--red-bg); }
 .badge-gray  { color: var(--text-muted); background: var(--bg-hover); }
 
-.ema-tabs {
-  display: flex;
-  gap: 4px;
-}
-.ema-tab {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: var(--bg-hover);
-  transition: all 0.15s;
-}
-.ema-tab:hover { color: var(--text); }
-.ema-tab.active {
-  color: var(--blue);
-  background: var(--blue-bg, rgba(59, 130, 246, 0.1));
-  font-weight: 600;
-}
-.ema-tab em {
-  font-style: normal;
-  margin-left: 3px;
-  opacity: 0.7;
-}
 .ema-detail {
   font-size: 11px;
   color: var(--text-muted);

@@ -13,7 +13,6 @@
         />
         <a-select v-model:value="ktype" style="width: 120px">
           <a-select-option value="1d">日K</a-select-option>
-          <a-select-option value="4h">4H K线</a-select-option>
           <a-select-option value="1w">周K</a-select-option>
         </a-select>
         <a-input-number
@@ -333,7 +332,7 @@ const closePrice = ref(null)
 
 // ── 利弗莫尔关键点（来自 /api/livermore/detail，独立信号体系）──
 // 只有日线才有意义：利弗莫尔关键点/箱体/周线潮汐都建立在日线尺度上，
-// 4H/1W 不请求，避免图面出现与当前周期不匹配的水平线。
+// 周线不请求，避免图面出现与当前周期不匹配的水平线。
 const livermore = ref({ levels: [], panorama: null, signals: [] })
 
 const hasData = computed(() => chartData.value.length > 0)
@@ -439,7 +438,7 @@ async function fetchData() {
   try {
     // 指标 / 支撑压力位 / 利弗莫尔关键点三路并行，后两者失败都不影响 K 线渲染。
     // 利弗莫尔只在日线上请求：其箱体、潮汐、ATR 全部基于日线尺度，
-    // 4H/1W 下画出来的水平线会与当前周期语义不符。
+    // 周线下画出来的水平线会与当前周期语义不符。
     const wantLiv = ktype.value === '1d'
     const [indRes, anaRes, livRes] = await Promise.all([
       getIndicators(code.value, ktype.value, days.value),

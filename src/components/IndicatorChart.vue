@@ -300,7 +300,7 @@ function drawKeyLevels(raw, candleSeries, markerBuf) {
         title:           lv.label || kind,
       })
 
-      // pivot 标记：用 bars_ago 从尾部反推序号，避开 4H 时间戳格式差异
+      // pivot 标记：用 bars_ago 从尾部反推序号，避开不同周期的时间格式差异
       if (lv.bars_ago == null) continue
       const idx = raw.length - 1 - Number(lv.bars_ago)
       if (!Number.isFinite(idx) || idx < 0 || idx >= raw.length) continue
@@ -381,7 +381,7 @@ function buildChart() {
       timeVisible: true,
       tickMarkFormatter: (time) => {
         if (typeof time === 'number') {
-          // 4H 数据 - Unix 时间戳
+          // 数值型时间（Unix 时间戳）：当前日线/周线都是字符串日期，这里保留作防御
           const d = new Date(time * 1000)
           const pad = (n) => String(n).padStart(2, '0')
           return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
