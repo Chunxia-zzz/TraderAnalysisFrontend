@@ -161,9 +161,15 @@ describe('市场温度', () => {
     expect(last()).toMatchObject({ method: 'get', url: '/api/market-temperature' })
   })
 
-  it('getMarketTemperatureHistory 默认 30 天', () => {
+  it('getMarketTemperatureHistory 默认拉 2025-01-01 起的全量序列', () => {
     api.getMarketTemperatureHistory()
-    expect(cfg().params).toEqual({ days: 30 })
+    // 2026-11-10 拆分后：两条指数序列 + 温差，默认覆盖全部可回算区间
+    expect(cfg().params).toEqual({ days: 465, start: '2025-01-01' })
+  })
+
+  it('getMarketTemperatureHistory 支持自定义 days 与 start', () => {
+    api.getMarketTemperatureHistory(60, '2026-01-01')
+    expect(cfg().params).toEqual({ days: 60, start: '2026-01-01' })
   })
 
   it('getAssetTemperatureHistory 默认 60 天并带 asset', () => {
