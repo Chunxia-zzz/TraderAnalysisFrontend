@@ -11,88 +11,140 @@
 
     <a-spin :spinning="loading">
 
-      <!-- ══ 美股大盘视图 ══ -->
-      <template v-if="view === 'market'">
-        <div class="card hero-card" style="margin-bottom:16px" v-if="data">
-          <div class="hero-body">
-            <div class="hero-left">
-              <div class="hero-eyebrow">美股大盘温度</div>
-              <div class="hero-score mono">{{ data.composite_score.toFixed(1) }}</div>
-              <div class="hero-sub">/ 100</div>
-              <span class="status-pill" :style="pillStyle(data.composite_score)">{{ getLevel(data.composite_score).label }}</span>
-              <div class="hero-action">{{ getLevel(data.composite_score).action }}</div>
-              <div class="hero-note">分数越高 = 越恐慌 = 越值得加仓（与个股评分同向）</div>
-            </div>
-            <div class="hero-right">
-              <div v-for="dim in activeDimensions" :key="dim.key" class="dim-block">
-                <div class="dim-value mono">{{ data[dim.key]?.toFixed(1) }}</div>
-                <div class="dim-label">{{ dim.name }}</div>
-                <div class="dim-weight">{{ dim.weight }}</div>
-                <div class="dim-bar">
-                  <div class="dim-bar-fill" :style="{ width: data[dim.key] + '%', background: dimColor(data[dim.key]) }"></div>
+      <!-- ══ 指数视图（SPY / QQQ 共用模板）══ -->
+      <template v-if="isIndexView">
+        <template v-if="activeIndex">
+          <div class="card hero-card" style="margin-bottom:16px">
+            <div class="hero-body">
+              <div class="hero-left">
+                <div class="hero-eyebrow">{{ activeIndex.label }}温度</div>
+                <div class="hero-score mono">{{ activeIndex.composite_score.toFixed(1) }}</div>
+                <div class="hero-sub">/ 100</div>
+                <span class="status-pill" :style="pillStyle(activeIndex.composite_score)">{{ getLevel(activeIndex.composite_score).label }}</span>
+                <div class="hero-action">{{ getLevel(activeIndex.composite_score).action }}</div>
+                <div class="hero-note">分数越高 = 越恐慌 = 越值得加仓（与个股评分同向）</div>
+              </div>
+              <div class="hero-right">
+                <div v-for="dim in activeIndex.dimensions" :key="dim.key" class="dim-block">
+                  <div class="dim-value mono">{{ dim.score?.toFixed(1) }}</div>
+                  <div class="dim-label">{{ dim.label }}</div>
+                  <div class="dim-weight">{{ (dim.weight * 100).toFixed(0) }}%</div>
+                  <div class="dim-bar">
+                    <div class="dim-bar-fill" :style="{ width: dim.score + '%', background: dimColor(dim.score) }"></div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div class="hero-footer">
-            <div class="footer-item">
-              <span class="footer-label">建议仓位</span>
-              <span class="footer-value mono">{{ data.target_position_pct.toFixed(1) }}%</span>
-            </div>
-            <div class="footer-item">
-              <span class="footer-label">数据日期</span>
-              <span class="footer-value mono">{{ data.date }}</span>
-            </div>
-            <div class="footer-item" v-if="leverageInfo">
-              <span class="footer-label">杠杆建议</span>
-              <span class="footer-value" style="color:var(--accent)">{{ leverageInfo }}</span>
-            </div>
-            <div class="footer-item">
-              <span class="footer-link" style="cursor:pointer" @click="goChart('US.SPY')">SPY K线 ↗</span>
-            </div>
-            <div class="footer-item">
-              <span class="footer-link" style="cursor:pointer" @click="goChart('US.QQQ')">QQQ K线 ↗</span>
-            </div>
-            <div class="footer-item">
-              <a href="https://edition.cnn.com/markets/fear-and-greed" target="_blank" rel="noopener noreferrer" class="footer-link">CNN Fear &amp; Greed Index ↗</a>
+            <div class="hero-footer">
+              <div class="footer-item">
+                <span class="footer-label">建议仓位</span>
+                <span class="footer-value mono">{{ activeIndex.target_position_pct.toFixed(1) }}%</span>
+              </div>
+              <div class="footer-item">
+                <span class="footer-label">数据日期</span>
+                <span class="footer-value mono">{{ activeIndex.date }}</span>
+              </div>
+              <div class="footer-item">
+                <span class="footer-label">另一个指数</span>
+                <span class="footer-value mono">{{ otherIndexText }}</span>
+              </div>
+              <div class="footer-item" v-if="leverageInfo">
+                <span class="footer-label">杠杆建议</span>
+                <span class="footer-value" style="color:var(--accent)">{{ leverageInfo }}</span>
+              </div>
+              <div class="footer-item">
+                <span class="footer-link" style="cursor:pointer" @click="goChart(activeIndex.code)">{{ activeIndex.key }} K线 ↗</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- SPY / QQQ -->
-        <div class="card-row" v-if="data" style="margin-bottom:16px">
-          <div class="card ticker-card">
-            <div class="ticker-header">SPY</div>
-            <div class="ticker-grid">
-              <div class="ticker-item"><span class="ticker-label">价格</span><span class="ticker-val mono">{{ fmt(data.spy_price) }}</span></div>
-              <div class="ticker-item"><span class="ticker-label">日RSI</span><span class="ticker-val mono" :class="rsiCls(data.spy_daily_rsi)">{{ fmt(data.spy_daily_rsi) }}</span></div>
-              <div class="ticker-item"><span class="ticker-label">周RSI</span><span class="ticker-val mono" :class="rsiCls(data.spy_weekly_rsi)">{{ fmt(data.spy_weekly_rsi) }}</span></div>
-              <div class="ticker-item"><span class="ticker-label">MA200偏离</span><span class="ticker-val mono" :class="data.spy_ma200_dev > 0 ? 'up' : 'down'">{{ pct(data.spy_ma200_dev) }}</span></div>
+          <!-- 技术指标 -->
+          <div class="card ticker-card" style="padding:20px 24px;margin-bottom:16px">
+            <div class="ticker-header" style="margin-bottom:16px;font-size:14px">技术指标</div>
+            <div class="asset-metrics-grid">
+              <div class="ticker-item">
+                <span class="ticker-label">指数点位</span>
+                <span class="ticker-val mono">{{ fmt(activeIndex.indicators.price) }}</span>
+              </div>
+              <div class="ticker-item">
+                <span class="ticker-label">日线 RSI6</span>
+                <span class="ticker-val mono" :class="rsiCls(activeIndex.indicators.daily_rsi)">{{ fmt(activeIndex.indicators.daily_rsi) }}</span>
+              </div>
+              <div class="ticker-item">
+                <span class="ticker-label">周线 RSI6</span>
+                <span class="ticker-val mono" :class="rsiCls(activeIndex.indicators.weekly_rsi)">{{ fmt(activeIndex.indicators.weekly_rsi) }}</span>
+              </div>
+              <div class="ticker-item">
+                <span class="ticker-label">MA200 偏离</span>
+                <span class="ticker-val mono" :class="(activeIndex.indicators.ma200_dev ?? 0) > 0 ? 'up' : 'down'">{{ pct(activeIndex.indicators.ma200_dev) }}</span>
+              </div>
+              <div class="ticker-item">
+                <span class="ticker-label">ATH 回撤</span>
+                <span class="ticker-val mono down">{{ pct(activeIndex.indicators.ath_drawdown) }}</span>
+              </div>
+              <div class="ticker-item">
+                <span class="ticker-label">52 周位置</span>
+                <span class="ticker-val mono">{{ pct(activeIndex.indicators.pos_52w) }}</span>
+              </div>
             </div>
           </div>
-          <div class="card ticker-card">
-            <div class="ticker-header">QQQ</div>
-            <div class="ticker-grid">
-              <div class="ticker-item"><span class="ticker-label">价格</span><span class="ticker-val mono">{{ fmt(data.qqq_price) }}</span></div>
-              <div class="ticker-item"><span class="ticker-label">日RSI</span><span class="ticker-val mono" :class="rsiCls(data.qqq_daily_rsi)">{{ fmt(data.qqq_daily_rsi) }}</span></div>
-              <div class="ticker-item"><span class="ticker-label">周RSI</span><span class="ticker-val mono" :class="rsiCls(data.qqq_weekly_rsi)">{{ fmt(data.qqq_weekly_rsi) }}</span></div>
-              <div class="ticker-item"><span class="ticker-label">MA200偏离</span><span class="ticker-val mono" :class="data.qqq_ma200_dev > 0 ? 'up' : 'down'">{{ pct(data.qqq_ma200_dev) }}</span></div>
+
+          <!-- 历史趋势 -->
+          <div class="card" style="padding:20px 24px;margin-bottom:12px" v-if="activeIndexHistory.length > 0">
+            <div class="card-title">历史趋势（{{ activeIndexHistory[0]?.date }} ~ {{ activeIndexHistory[activeIndexHistory.length - 1]?.date }}）</div>
+            <div ref="indexChartRef" style="width:100%;height:300px"></div>
+          </div>
+
+          <div class="vix-tip">
+            <span style="color:var(--accent)">⚑</span>
+            两个指数共用同一套阈值，因此两张温度卡可以直接比大小；差值见「标普-纳指温差」页
+          </div>
+        </template>
+        <a-empty v-else-if="!loading" description="暂无指数温度数据，请确认后端已运行 temperature 命令" />
+      </template>
+
+      <!-- ══ 温差视图 ══ -->
+      <template v-else-if="view === 'spread'">
+        <template v-if="data && data.spread">
+          <div class="card hero-card" style="margin-bottom:16px">
+            <div class="hero-body">
+              <div class="hero-left">
+                <div class="hero-eyebrow">标普 − 纳指 温差</div>
+                <div class="hero-score mono" :style="{ color: spreadColor(data.spread.value) }">{{ formatSpread(data.spread.value) }}</div>
+                <div class="hero-sub">SPY 温度 − QQQ 温度</div>
+                <span class="status-pill" :style="pillStyle(data.spread.value > 0 ? 30 : 80)">{{ data.spread.label }}</span>
+                <div class="hero-action">负值 = 标普温度更低 = 标普相对更强</div>
+                <div class="hero-note">正值相反：纳指跌得更狠、温度更高，说明纳指相对更弱</div>
+              </div>
+              <div class="hero-right">
+                <div class="dim-block" v-for="idx in data.indexes" :key="idx.key">
+                  <div class="dim-value mono">{{ idx.composite_score.toFixed(1) }}</div>
+                  <div class="dim-label">{{ idx.key }} 温度</div>
+                  <div class="dim-weight">仓位 {{ idx.target_position_pct.toFixed(1) }}%</div>
+                  <div class="dim-bar">
+                    <div class="dim-bar-fill" :style="{ width: idx.composite_score + '%', background: dimColor(idx.composite_score) }"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="hero-footer">
+              <div class="footer-item">
+                <span class="footer-label">数据日期</span>
+                <span class="footer-value mono">{{ data.date }}</span>
+              </div>
+              <div class="footer-item">
+                <span class="footer-label">走势含义</span>
+                <span class="footer-value">温差长期为负 = 标普持续强于纳指</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 历史趋势 -->
-        <div class="card" style="padding:20px 24px;margin-bottom:12px" v-if="historyData.length > 0">
-          <div class="card-title">历史趋势</div>
-          <div ref="chartRef" style="width:100%;height:300px"></div>
-        </div>
-
-        <div class="vix-tip" v-if="data">
-          <span style="color:var(--accent)">⚑</span>
-          交易时请观察VIX期货价格，30以上为极度恐慌，35以上往往是抄底的绝佳机会
-        </div>
-
-        <a-empty v-if="!loading && !data" description="暂无数据，请确认后端已运行 temperature 命令" />
+          <div class="card" style="padding:20px 24px;margin-bottom:12px" v-if="spreadHistory.length > 0">
+            <div class="card-title">温差走势（{{ spreadHistory[0]?.date }} ~ {{ spreadHistory[spreadHistory.length - 1]?.date }}）</div>
+            <div ref="spreadChartRef" style="width:100%;height:300px"></div>
+          </div>
+        </template>
+        <a-empty v-else-if="!loading" description="暂无温差数据" />
       </template>
 
       <!-- ══ 黄金 / 比特币视图（共用模板）══ -->
@@ -189,10 +241,13 @@ import { getMarketTemperature, getMarketTemperatureHistory, getAssetTemperatureH
 const router = useRouter()
 
 // ── 常量 ──
+// 2026-11-10 起温度按指数拆分：不再有「合并大盘温度」视图
 const TABS = [
-  { key: 'market', label: '美股大盘', cls: '' },
-  { key: 'gold',   label: '黄金',     cls: 'gold' },
-  { key: 'btc',    label: '比特币',   cls: 'orange' },
+  { key: 'spy',    label: '标普 500',  cls: '' },
+  { key: 'qqq',    label: '纳指 100',  cls: '' },
+  { key: 'spread', label: '标普-纳指温差', cls: '' },
+  { key: 'gold',   label: '黄金',      cls: 'gold' },
+  { key: 'btc',    label: '比特币',    cls: 'orange' },
 ]
 
 // 高分=恐慌=加仓机会（2026-10-19 镜像反转，与个股评分 total_score 同向）
@@ -207,12 +262,11 @@ const TEMPERATURE_LEVELS = [
   { min: 0,   label: '极度贪婪', action: '大幅减仓' },
 ]
 
-const MARKET_DIMS = [
+const ASSET_DIMS = [
   { key: 'daily_tech_score',  name: '日线技术', weight: '50%' },
   { key: 'weekly_tech_score', name: '周线技术', weight: '35%' },
   { key: 'price_score',       name: '价格位置', weight: '15%' },
 ]
-const ASSET_DIMS = MARKET_DIMS
 
 const LEVERAGE_MAP = {
   'margin':          '建议融资补仓（现货ETF）',
@@ -220,12 +274,18 @@ const LEVERAGE_MAP = {
 }
 
 // ── 状态 ──
-const view = ref('market')
+const view = ref('spy')
 const loading = ref(true)
 const data = ref(null)
-const historyData = ref([])
-const chartRef = ref(null)
-let chartInstance = null
+
+// 指数历史：{ SPY: [...], QQQ: [...] }，温差： [{date, value}]
+const indexHistory = ref({ SPY: [], QQQ: [] })
+const spreadHistory = ref([])
+
+const indexChartRef = ref(null)
+let indexChartInstance = null
+const spreadChartRef = ref(null)
+let spreadChartInstance = null
 
 const assetHistory = ref({ gold: [], btc: [] })
 const assetChartRef = ref(null)
@@ -252,6 +312,19 @@ function dimColor(score) {
   return 'var(--red)'
 }
 
+// 温差：负=标普更强（蓝），正=纳指更弱（红），0 附近中性
+function spreadColor(value) {
+  if (value == null) return 'var(--text-muted)'
+  if (value < 0) return 'var(--blue)'
+  if (value > 0) return 'var(--red)'
+  return 'var(--text-secondary)'
+}
+
+function formatSpread(value) {
+  if (value == null) return '—'
+  return (value > 0 ? '+' : '') + Number(value).toFixed(1)
+}
+
 function fmt(val) { return val != null ? Number(val).toFixed(2) : '-' }
 function pct(val) { return val != null ? (val * 100).toFixed(1) + '%' : '-' }
 function rsiCls(val) {
@@ -260,13 +333,30 @@ function rsiCls(val) {
 }
 
 // ── computed ──
-const activeDimensions = computed(() =>
-  data.value ? MARKET_DIMS.filter(d => data.value[d.key] != null) : []
-)
+const isIndexView = computed(() => view.value === 'spy' || view.value === 'qqq')
+
+const activeIndex = computed(() => {
+  if (!data.value || !data.value.indexes) return null
+  const key = view.value.toUpperCase()
+  return data.value.indexes.find(i => i.key === key) || null
+})
+
+const otherIndexText = computed(() => {
+  if (!data.value || !data.value.indexes) return '—'
+  const otherKey = view.value === 'spy' ? 'QQQ' : 'SPY'
+  const other = data.value.indexes.find(i => i.key === otherKey)
+  if (!other || other.composite_score == null) return '—'
+  return `${otherKey} ${other.composite_score.toFixed(1)}`
+})
+
+const activeIndexHistory = computed(() => {
+  if (!isIndexView.value) return []
+  return indexHistory.value[view.value.toUpperCase()] || []
+})
 
 const leverageInfo = computed(() => {
-  if (!data.value) return null
-  return LEVERAGE_MAP[data.value.leverage_tool] || null
+  if (!activeIndex.value) return null
+  return LEVERAGE_MAP[activeIndex.value.leverage_tool] || null
 })
 
 const asset = computed(() => {
@@ -285,25 +375,23 @@ function goChart(code) {
   router.push({ name: 'chart', query: { code } })
 }
 
-// ── 历史图 ──
-function renderChart() {
-  if (!chartRef.value || historyData.value.length === 0) return
-  if (!chartInstance) chartInstance = echarts.init(chartRef.value)
-  const dates     = historyData.value.map(d => d.date)
-  const scores    = historyData.value.map(d => d.composite_score)
-  const positions = historyData.value.map(d => d.target_position_pct)
-  chartInstance.setOption({
+// ── 指数历史图 ──
+function renderIndexChart() {
+  const history = activeIndexHistory.value
+  if (!indexChartRef.value || history.length === 0) return
+  if (!indexChartInstance) indexChartInstance = echarts.init(indexChartRef.value)
+  indexChartInstance.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['综合评分', '建议仓位%'], textStyle: { color: '#59636e', fontSize: 12 } },
+    legend: { data: ['温度', '建议仓位%'], textStyle: { color: '#59636e', fontSize: 12 } },
     grid: { left: 50, right: 60, bottom: 30, top: 40 },
-    xAxis: { type: 'category', data: dates, axisLabel: { color: '#8b949e', fontSize: 11 } },
+    xAxis: { type: 'category', data: history.map(d => d.date), axisLabel: { color: '#8b949e', fontSize: 11 } },
     yAxis: [
-      { type: 'value', name: '评分',  min: 0, max: 100, axisLabel: { color: '#8b949e', fontSize: 11 } },
+      { type: 'value', name: '温度',  min: 0, max: 100, axisLabel: { color: '#8b949e', fontSize: 11 } },
       { type: 'value', name: '仓位%', min: 0, max: 130, axisLabel: { color: '#8b949e', fontSize: 11 } },
     ],
     series: [
       {
-        name: '综合评分', type: 'line', data: scores, smooth: true,
+        name: '温度', type: 'line', data: history.map(d => d.composite_score), smooth: true,
         itemStyle: { color: '#0550ae' }, lineStyle: { color: '#0550ae' },
         markArea: { silent: true, data: [
           [{ yAxis: 70, itemStyle: { color: 'rgba(5,80,174,0.04)'   } }, { yAxis: 100 }],
@@ -312,11 +400,42 @@ function renderChart() {
         ]},
       },
       {
-        name: '建议仓位%', type: 'line', yAxisIndex: 1, data: positions, smooth: true,
+        name: '建议仓位%', type: 'line', yAxisIndex: 1,
+        data: history.map(d => d.target_position_pct), smooth: true,
         lineStyle: { type: 'dashed', color: '#946800' }, itemStyle: { color: '#946800' },
       },
     ],
-  })
+  }, true)
+  indexChartInstance.resize()
+}
+
+// ── 温差图 ──
+function renderSpreadChart() {
+  const history = spreadHistory.value
+  if (!spreadChartRef.value || history.length === 0) return
+  if (!spreadChartInstance) spreadChartInstance = echarts.init(spreadChartRef.value)
+  spreadChartInstance.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['温差 (SPY − QQQ)'], textStyle: { color: '#59636e', fontSize: 12 } },
+    grid: { left: 50, right: 30, bottom: 30, top: 40 },
+    xAxis: { type: 'category', data: history.map(d => d.date), axisLabel: { color: '#8b949e', fontSize: 11 } },
+    yAxis: { type: 'value', name: '温差', axisLabel: { color: '#8b949e', fontSize: 11 } },
+    series: [{
+      name: '温差 (SPY − QQQ)', type: 'line', data: history.map(d => d.value), smooth: true,
+      itemStyle: { color: '#0550ae' }, lineStyle: { color: '#0550ae', width: 1.5 },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(5,80,174,0.18)' },
+          { offset: 1, color: 'rgba(5,80,174,0.02)' },
+        ]),
+      },
+      markLine: {
+        silent: true, symbol: 'none',
+        data: [{ yAxis: 0, lineStyle: { color: '#8b949e', type: 'dashed' }, label: { show: false } }],
+      },
+    }],
+  }, true)
+  spreadChartInstance.resize()
 }
 
 // ── 资产历史图 ──
@@ -340,54 +459,68 @@ function renderAssetChart(viewKey) {
         [{ yAxis: 0,  itemStyle: { color: 'rgba(164,14,38,0.04)'  } }, { yAxis: 30  }],
       ]},
     }],
-  })
+  }, true)
+  assetChartInstance.resize()
+}
+
+function disposeAll() {
+  if (indexChartInstance)  { indexChartInstance.dispose();  indexChartInstance = null }
+  if (spreadChartInstance) { spreadChartInstance.dispose(); spreadChartInstance = null }
+  if (assetChartInstance)  { assetChartInstance.dispose();  assetChartInstance = null }
 }
 
 // 切换视图时销毁旧图实例，重建新图（v-if 会销毁/重建 DOM）
-watch(view, async (v, oldV) => {
+watch(view, async () => {
+  disposeAll()
   await nextTick()
-  if (oldV === 'market') {
-    if (chartInstance) { chartInstance.dispose(); chartInstance = null }
-  } else {
-    if (assetChartInstance) { assetChartInstance.dispose(); assetChartInstance = null }
-  }
-  if (v === 'market') renderChart()
-  else renderAssetChart(v)
+  if (isIndexView.value) renderIndexChart()
+  else if (view.value === 'spread') renderSpreadChart()
+  else renderAssetChart(view.value)
 })
 
 onMounted(async () => {
   try {
     const res = await getMarketTemperature()
-    data.value = res.data
+    // 兼容：后端改为 indexes[] 结构；旧结构（顶层 composite_score）视为无数据
+    data.value = res.data && Array.isArray(res.data.indexes) ? res.data : null
   } catch {
     data.value = null
   } finally {
     loading.value = false
   }
 
-  // 并行拉取三条历史曲线
-  const [marketRes, gldRes, btcRes] = await Promise.allSettled([
-    getMarketTemperatureHistory(60),
+  // 并行拉取三类历史曲线
+  const [indexRes, gldRes, btcRes] = await Promise.allSettled([
+    getMarketTemperatureHistory(),
     getAssetTemperatureHistory('GLD', 60),
     getAssetTemperatureHistory('BTC', 60),
   ])
-  historyData.value = marketRes.status === 'fulfilled' ? (marketRes.value.data.history || []) : []
+
+  if (indexRes.status === 'fulfilled') {
+    const payload = indexRes.value.data || {}
+    const series = payload.series || []
+    const spy = series.find(s => s.key === 'SPY')
+    const qqq = series.find(s => s.key === 'QQQ')
+    indexHistory.value.SPY = spy ? (spy.points || []) : []
+    indexHistory.value.QQQ = qqq ? (qqq.points || []) : []
+    spreadHistory.value = payload.spread || []
+  }
   assetHistory.value.gold = gldRes.status === 'fulfilled' ? (gldRes.value.data.history || []) : []
   assetHistory.value.btc  = btcRes.status === 'fulfilled' ? (btcRes.value.data.history || []) : []
 
   await nextTick()
-  renderChart()
+  if (isIndexView.value) renderIndexChart()
   window.addEventListener('resize', handleResize)
 })
 
 function handleResize() {
-  chartInstance?.resize()
+  indexChartInstance?.resize()
+  spreadChartInstance?.resize()
   assetChartInstance?.resize()
 }
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  chartInstance?.dispose()
-  assetChartInstance?.dispose()
+  disposeAll()
 })
 </script>
 
@@ -476,12 +609,7 @@ onUnmounted(() => {
 .footer-link  { font-size: 12px; color: var(--blue); text-decoration: none; }
 .footer-link:hover { text-decoration: underline; }
 
-/* ── SPY/QQQ 行 ── */
-.card-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
+/* ── 指标卡 ── */
 .ticker-card  { padding: 16px 20px; }
 .ticker-header {
   font-size: 13px;
@@ -490,7 +618,6 @@ onUnmounted(() => {
   margin-bottom: 12px;
   font-family: 'DM Mono', monospace;
 }
-.ticker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; }
 .ticker-item { display: flex; flex-direction: column; gap: 2px; }
 .ticker-label { font-size: 11px; color: var(--text-muted); }
 .ticker-val   { font-size: 14px; font-weight: 600; color: var(--text); }

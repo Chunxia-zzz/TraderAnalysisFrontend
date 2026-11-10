@@ -48,10 +48,10 @@ export const getLivermoreSignals = ({ date, source, allTide, refresh } = {}) =>
 export const getLivermoreDetail = (code) =>
   client.get('/api/livermore/detail', { params: { code } })
 
-// ── 市场温度 ──
+// ── 市场温度（2026-11-10 起按指数拆分：SPY / QQQ 各一条 + 温差）──
 export const getMarketTemperature = () => client.get('/api/market-temperature')
-export const getMarketTemperatureHistory = (days = 30) =>
-  client.get('/api/market-temperature/history', { params: { days } })
+export const getMarketTemperatureHistory = (days = 465, start = '2025-01-01') =>
+  client.get('/api/market-temperature/history', { params: { days, start } })
 export const getAssetTemperatureHistory = (asset, days = 60) =>
   client.get('/api/asset-temperature/history', { params: { asset, days } })
 
