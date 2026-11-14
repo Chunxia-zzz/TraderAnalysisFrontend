@@ -1,11 +1,20 @@
 <template>
   <div>
-    <!-- ── 顶部视图切换 ── -->
+    <!-- ── 一级：资产大类 ── -->
     <div class="card view-switcher">
       <span
-        v-for="tab in TABS" :key="tab.key"
-        class="view-tab" :class="[tab.cls, { active: view === tab.key }]"
-        @click="switchView(tab.key)"
+        v-for="tab in TOP_TABS" :key="tab.key"
+        class="view-tab" :class="[tab.cls, { active: topView === tab.key }]"
+        @click="switchTop(tab.key)"
+      >{{ tab.label }}</span>
+    </div>
+
+    <!-- ── 二级：美股细分指数（仅「美股」分组显示）── -->
+    <div class="card view-switcher sub-switcher" v-if="topView === 'us_index'">
+      <span
+        v-for="tab in SUB_TABS" :key="tab.key"
+        class="view-tab sub" :class="{ active: subView === tab.key }"
+        @click="switchSub(tab.key)"
       >{{ tab.label }}</span>
     </div>
 
@@ -45,8 +54,8 @@
                 <span class="footer-value mono">{{ activeIndex.date }}</span>
               </div>
               <div class="footer-item">
-                <span class="footer-label">另一个指数</span>
-                <span class="footer-value mono">{{ otherIndexText }}</span>
+                <span class="footer-label">标普-纳指温差</span>
+                <span class="footer-value mono" :style="{ color: spreadColor(data?.spread?.value) }">{{ formatSpread(data?.spread?.value) }}</span>
               </div>
               <div class="footer-item" v-if="leverageInfo">
                 <span class="footer-label">杠杆建议</span>
@@ -58,12 +67,18 @@
             </div>
           </div>
 
+          <!-- 口径提示（如 SOXX 高波动、RSP 宽度语义） -->
+          <div class="note-bar" v-if="activeIndex.note">
+            <span class="note-icon">⚑</span>
+            <span>{{ activeIndex.note }}</span>
+          </div>
+
           <!-- 技术指标 -->
           <div class="card ticker-card" style="padding:20px 24px;margin-bottom:16px">
             <div class="ticker-header" style="margin-bottom:16px;font-size:14px">技术指标</div>
             <div class="asset-metrics-grid">
               <div class="ticker-item">
-                <span class="ticker-label">指数点位</span>
+                <span class="ticker-label">ETF 价格（代理）</span>
                 <span class="ticker-val mono">{{ fmt(activeIndex.indicators.price) }}</span>
               </div>
               <div class="ticker-item">
@@ -104,7 +119,7 @@
       </template>
 
       <!-- ══ 温差视图 ══ -->
-      <template v-else-if="view === 'spread'">
+      <template v-else-if="topView === 'us_index' && subView === 'spread'">
         <template v-if="data && data.spread">
           <div class="card hero-card" style="margin-bottom:16px">
             <div class="hero-body">
@@ -241,13 +256,21 @@ import { getMarketTemperature, getMarketTemperatureHistory, getAssetTemperatureH
 const router = useRouter()
 
 // ── 常量 ──
-// 2026-11-10 起温度按指数拆分：不再有「合并大盘温度」视图
-const TABS = [
-  { key: 'spy',    label: '标普 500',  cls: '' },
-  { key: 'qqq',    label: '纳指 100',  cls: '' },
-  { key: 'spread', label: '标普-纳指温差', cls: '' },
-  { key: 'gold',   label: '黄金',      cls: 'gold' },
-  { key: 'btc',    label: '比特币',    cls: 'orange' },
+// 2026-11-14 起三级导航：一级=资产大类，二级=美股细分指数（specs/004）
+const TOP_TABS = [
+  { key: 'us_index', label: '美股',   cls: '' },
+  { key: 'gold',     label: '黄金',   cls: 'gold' },
+  { key: 'btc',      label: '比特币', cls: 'orange' },
+]
+
+// 二级 tab 的标签来自后端 indexes[].label（单一真相源），接口未到时用兜底清单
+const SUB_FALLBACK = [
+  { key: 'spy',  label: '标普 500' },
+  { key: 'qqq',  label: '纳指 100' },
+  { key: 'dia',  label: '道琼斯工业' },
+  { key: 'iwm',  label: '罗素 2000' },
+  { key: 'soxx', label: '费城半导体' },
+  { key: 'rsp',  label: '标普 500 等权' },
 ]
 
 // 高分=恐慌=加仓机会（2026-10-19 镜像反转，与个股评分 total_score 同向）
@@ -274,12 +297,13 @@ const LEVERAGE_MAP = {
 }
 
 // ── 状态 ──
-const view = ref('spy')
+const topView = ref('us_index')
+const subView = ref('spy')   // 切走再回来要保留（spec FR-010）
 const loading = ref(true)
 const data = ref(null)
 
-// 指数历史：{ SPY: [...], QQQ: [...] }，温差： [{date, value}]
-const indexHistory = ref({ SPY: [], QQQ: [] })
+// 指数历史：{ SPY: [...], QQQ: [...], ... }，温差： [{date, value}]
+const indexHistory = ref({})
 const spreadHistory = ref([])
 
 const indexChartRef = ref(null)
@@ -333,25 +357,28 @@ function rsiCls(val) {
 }
 
 // ── computed ──
-const isIndexView = computed(() => view.value === 'spy' || view.value === 'qqq')
+// 二级 tab：标签取自后端 indexes[].label（单一真相源），末尾固定追加「温差」
+const SUB_TABS = computed(() => {
+  const indexes = data.value?.indexes
+  const base = indexes && indexes.length
+    ? indexes.map(i => ({ key: i.key.toLowerCase(), label: i.label }))
+    : SUB_FALLBACK
+  return [...base, { key: 'spread', label: '标普-纳指温差' }]
+})
+
+const isIndexView = computed(
+  () => topView.value === 'us_index' && subView.value !== 'spread'
+)
 
 const activeIndex = computed(() => {
   if (!data.value || !data.value.indexes) return null
-  const key = view.value.toUpperCase()
+  const key = subView.value.toUpperCase()
   return data.value.indexes.find(i => i.key === key) || null
-})
-
-const otherIndexText = computed(() => {
-  if (!data.value || !data.value.indexes) return '—'
-  const otherKey = view.value === 'spy' ? 'QQQ' : 'SPY'
-  const other = data.value.indexes.find(i => i.key === otherKey)
-  if (!other || other.composite_score == null) return '—'
-  return `${otherKey} ${other.composite_score.toFixed(1)}`
 })
 
 const activeIndexHistory = computed(() => {
   if (!isIndexView.value) return []
-  return indexHistory.value[view.value.toUpperCase()] || []
+  return indexHistory.value[subView.value.toUpperCase()] || []
 })
 
 const leverageInfo = computed(() => {
@@ -361,14 +388,18 @@ const leverageInfo = computed(() => {
 
 const asset = computed(() => {
   if (!data.value) return null
-  if (view.value === 'gold') return data.value.gld_temp
-  if (view.value === 'btc')  return data.value.btc_temp
+  if (topView.value === 'gold') return data.value.gld_temp
+  if (topView.value === 'btc')  return data.value.btc_temp
   return null
 })
 
 // ── 操作 ──
-function switchView(key) {
-  view.value = key
+function switchTop(key) {
+  topView.value = key
+}
+
+function switchSub(key) {
+  subView.value = key
 }
 
 function goChart(code) {
@@ -470,12 +501,12 @@ function disposeAll() {
 }
 
 // 切换视图时销毁旧图实例，重建新图（v-if 会销毁/重建 DOM）
-watch(view, async () => {
+watch([topView, subView], async () => {
   disposeAll()
   await nextTick()
   if (isIndexView.value) renderIndexChart()
-  else if (view.value === 'spread') renderSpreadChart()
-  else renderAssetChart(view.value)
+  else if (subView.value === 'spread') renderSpreadChart()
+  else renderAssetChart(topView.value)
 })
 
 onMounted(async () => {
@@ -499,10 +530,9 @@ onMounted(async () => {
   if (indexRes.status === 'fulfilled') {
     const payload = indexRes.value.data || {}
     const series = payload.series || []
-    const spy = series.find(s => s.key === 'SPY')
-    const qqq = series.find(s => s.key === 'QQQ')
-    indexHistory.value.SPY = spy ? (spy.points || []) : []
-    indexHistory.value.QQQ = qqq ? (qqq.points || []) : []
+    const map = {}
+    for (const item of series) map[item.key] = item.points || []
+    indexHistory.value = map
     spreadHistory.value = payload.spread || []
   }
   assetHistory.value.gold = gldRes.status === 'fulfilled' ? (gldRes.value.data.history || []) : []
@@ -551,6 +581,32 @@ onUnmounted(() => {
 .view-tab.active { background: var(--bg-emphasis); color: #fff; }
 .view-tab.gold.active   { background: #946800; }
 .view-tab.orange.active { background: #f7931a; }
+
+/* ── 二级 tab（美股细分指数）：允许换行，窄屏不溢出 ── */
+.sub-switcher {
+  margin-top: -8px;
+  padding: 8px 12px;
+  background: var(--bg-hover);
+  flex-wrap: wrap;
+}
+.view-tab.sub { font-size: 12px; padding: 4px 12px; }
+.view-tab.sub.active { background: var(--blue); color: #fff; }
+
+/* ── 口径提示条 ── */
+.note-bar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #7a5b00;
+  background: #fff8e1;
+  border: 1px solid #f0e0a8;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+.note-icon { color: #b8860b; }
 
 /* ── Hero 卡片 ── */
 .hero-card { padding: 28px 32px 20px; }
